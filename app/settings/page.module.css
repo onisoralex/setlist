@@ -1,0 +1,87 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: var(--max-width-content);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-foreground-muted);
+}
+
+.field input {
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-size: var(--font-size-md);
+  max-width: 6rem;
+}
+
+.hint {
+  font-size: var(--font-size-sm);
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.saved {
+  color: var(--color-success);
+}
+
+.colorGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.colorGroup legend {
+  font-weight: 600;
+  padding: 0 var(--space-xs);
+}
+
+.colorField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.colorField label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-foreground-muted);
+}
+
+.colorField input[type="color"] {
+  width: 2.5rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+.badge {
+  font-size: var(--font-size-sm);
+  color: var(--color-foreground-muted);
+  padding: 0 var(--space-xs);
+}

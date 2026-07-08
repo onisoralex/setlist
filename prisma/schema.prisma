@@ -1,0 +1,156 @@
+// Prisma 7 generator: "prisma-client" (not "prisma-client-js") generates into an explicit
+// output path instead of node_modules -- required as of v7, see prisma.config.ts for the
+// connection string setup (moved out of the datasource block in v7).
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Stable identity for a song across all its edited versions. Deliberately has NO reference
+// to a specific `song` row -- keeping this table dumb avoids a circular FK between song_group
+// and song. "Current version" is derived via MAX(version) at query time, never stored.
+// `title` lives here, not on `song`: it's the song's stable identity, not versioned data --
+// it doesn't change over time the way key/instrument/song structure do (see
+// lib/song-versioning.ts doc comment).
+model SongGroup {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title     String
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  songs          Song[]
+  trackListSongs TrackListSong[]
+
+  @@map("song_group")
+}
+
+// Immutable, append-only version rows. A "change everywhere going forward" edit ALWAYS
+// inserts a new row here -- it never UPDATEs an existing one. `title` is not part of this
+// model at all -- see the `SongGroup.title` comment above.
+model Song {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  songGroupId String   @map("song_group_id") @db.Uuid
+  version     Int
+  key         String
+  transpose   String
+  instrument  String
+  notes       String?
+  sheet       String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  songGroup      SongGroup       @relation(fields: [songGroupId], references: [id], onDelete: Restrict)
+  trackListSongs TrackListSong[]
+
+  @@unique([songGroupId, version])
+  @@map("song")
+}
+
+enum EventStatus {
+  draft
+  scheduled
+  played
+
+  @@map("event_status")
+}
+
+enum EventType {
+  sunday_morning
+  sunday_evening
+  other
+
+  @@map("event_type")
+}
+
+enum TrackListEntryType {
+  song
+  spacer
+
+  @@map("track_list_entry_type")
+}
+
+model Event {
+  id     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date   DateTime @db.Date
+  type   EventType
+  // Required (application-level, not a DB constraint) only when type = other -- e.g. a
+  // wedding or a one-off Christmas service needs a real name instead of just "Other".
+  // NULL = no custom name set.
+  name      String?
+  status    EventStatus @default(draft)
+  // Manual freeze, independent of status -- see spec 00-foundation.md 3.2.
+  lockedAt  DateTime?   @map("locked_at") @db.Timestamptz
+  archived  Boolean     @default(false)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  trackListSongs TrackListSong[]
+
+  @@map("event")
+}
+
+// One row per entry placed on an event's setlist -- either a song or a spacer ("blank line",
+// e.g. a prayer/sermon happens here). Spacers are independent, reorderable entries in their
+// own right (spec 00-foundation.md 1), not an attribute glued to a specific song.
+model TrackListSong {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String              @map("event_id") @db.Uuid
+  entryType   TrackListEntryType  @default(song) @map("entry_type")
+  // Only populated when entryType = song; NULL for spacer rows. Enforced by the
+  // track_list_song_entry_consistency CHECK constraint added by hand in this model's migration.
+  songGroupId String?             @map("song_group_id") @db.Uuid
+  songId      String?             @map("song_id") @db.Uuid
+  position    Int
+
+  // Nullable overrides. NULL = inherit from `songId`'s row. Non-null (INCLUDING an empty
+  // string) = explicit override for this event only. Route handlers must distinguish
+  // "field omitted" from "field sent as null" from "field sent as ''" -- see lib/track-list.ts.
+  // Unused/ignored for spacer rows -- no need to null-guard at the schema level.
+  overrideTitle      String? @map("override_title")
+  overrideKey        String? @map("override_key")
+  overrideTranspose  String? @map("override_transpose")
+  overrideInstrument String? @map("override_instrument")
+  overrideNotes      String? @map("override_notes")
+  overrideSheet      String? @map("override_sheet")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  event     Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  songGroup SongGroup? @relation(fields: [songGroupId], references: [id], onDelete: Restrict)
+  song      Song?      @relation(fields: [songId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, position])
+  @@map("track_list_song")
+}
+
+// Singleton settings row -- the CHECK constraint (added via raw SQL in the migration,
+// Prisma has no native "exactly one row" constraint) enforces exactly one row.
+model Settings {
+  id                     Boolean @id @default(true)
+  octaveUpDisplaySymbol  String  @default("^") @map("octave_up_display_symbol")
+
+  // Font-size settings: always populated (no light/dark distinction exists for these today),
+  // defaults mirror app/globals.css's :root block at time of writing.
+  fontSizeSm       String @default("1.3125rem") @map("font_size_sm")
+  fontSizeMd       String @default("1.5rem")    @map("font_size_md")
+  fontSizeLg       String @default("1.875rem")  @map("font_size_lg")
+  fontSizeXl       String @default("2.625rem")  @map("font_size_xl")
+  fontSizeHeading  String @default("3.5rem")    @map("font_size_heading")
+  fontSizeNavBrand String @default("2.5rem")    @map("font_size_nav_brand")
+  fontSizeNavLink  String @default("1.75rem")   @map("font_size_nav_link")
+
+  // Nullable button-color overrides. NULL = no override, fall through to the automatic
+  // light/dark default already wired up via the --btn-* tokens in app/globals.css.
+  btnPrimaryBackground   String? @map("btn_primary_background")
+  btnPrimaryColor        String? @map("btn_primary_color")
+  btnSecondaryBackground String? @map("btn_secondary_background")
+  btnSecondaryColor      String? @map("btn_secondary_color")
+  btnDangerBackground    String? @map("btn_danger_background")
+  btnDangerColor         String? @map("btn_danger_color")
+
+  @@map("settings")
+}

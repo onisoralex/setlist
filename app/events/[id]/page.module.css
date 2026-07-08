@@ -1,0 +1,98 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.meta {
+  color: var(--color-foreground-muted);
+  font-size: var(--font-size-sm);
+}
+
+.controls {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.empty {
+  color: var(--color-foreground-muted);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Renders the blank-line gap for group_break_before (spec §1) -- a plain spacer, not a
+   bordered element, so it reads as "a pause happens here" rather than a divider between songs. */
+.groupBreak {
+  height: var(--space-xl);
+}
+
+.song {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.songRow {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md) var(--space-sm);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.songRow:hover {
+  background: var(--color-surface);
+}
+
+.songTitle {
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+}
+
+.songMeta {
+  font-size: var(--font-size-sm);
+  color: var(--color-foreground-muted);
+}
+
+.sheetPanel {
+  padding: 0 var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.notes {
+  color: var(--color-foreground-muted);
+  font-style: italic;
+  font-size: var(--font-size-sm);
+}
+
+.sheet {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  line-height: 1.6;
+  font-size: var(--font-size-sm);
+}

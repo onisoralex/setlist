@@ -1,0 +1,63 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.meta {
+  color: var(--color-foreground-muted);
+  font-size: var(--font-size-sm);
+}
+
+.editButton {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.notes {
+  color: var(--color-foreground-muted);
+  font-style: italic;
+}
+
+.sheet {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  line-height: 1.6;
+}
+
+.empty {
+  color: var(--color-foreground-muted);
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.history {
+  font-size: var(--font-size-sm);
+  color: var(--color-foreground-muted);
+}
+
+.history ul {
+  list-style: none;
+  margin-top: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}

@@ -1,0 +1,76 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.search {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  width: 100%;
+  max-width: 24rem;
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.empty {
+  color: var(--color-foreground-muted);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.rowLink {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md) var(--space-sm);
+  min-width: 0;
+}
+
+.rowLink:hover {
+  background: var(--color-surface);
+}
+
+.title {
+  font-weight: 600;
+}
+
+.meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-foreground-muted);
+}
+
+.rowActions {
+  display: flex;
+  gap: var(--space-xs);
+  padding-right: var(--space-sm);
+}
+
+.compactButton {
+  padding: var(--space-sm) var(--space-md);
+}
