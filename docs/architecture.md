@@ -162,7 +162,9 @@ None. See `docs/monetization.md`.
 - The Next.js app itself runs on the host via `npm run dev` (not containerized) — Next.js Fast Refresh already gives hot reload with zero Docker complexity, and this avoids Windows/Docker bind-mount file-watching issues entirely.
 - `DATABASE_URL` in `.env` points at the local `db` container (`postgresql://...@localhost:5432/...`).
 
-**Production:** Vercel (frontend + API) + Neon (via Vercel Marketplace). No Docker in production — this is not a self-hosted deployment, unlike the coffee-shop project's Raspberry Pi setup. No `docker-compose.prod.yaml` or systemd setup script is needed here.
+**Production:** Vercel (frontend + API) + Neon. No Docker in production — this is not a self-hosted deployment, unlike the coffee-shop project's Raspberry Pi setup. No `docker-compose.prod.yaml` or systemd setup script is needed here. In this deployment's actual history, the Neon database was created directly through Neon's own signup wizard rather than the Vercel Marketplace integration — functionally identical, just means `DATABASE_URL`/`DIRECT_DATABASE_URL` were set by hand in Vercel's project settings instead of being auto-injected.
+
+**Production migrations run automatically on every deploy** — the `build` script is `prisma migrate deploy && next build` (see `package.json`), not just `next build`. This means a full database reset (or a brand-new Neon database with the same connection strings) self-heals on the next deploy, with no manual `vercel env pull` + `prisma migrate deploy` dance required. That manual sequence is still what you'd use to apply a migration *without* triggering a full redeploy, but it's no longer required for normal operation. Seeding (`prisma db seed`) is deliberately **not** part of this automatic step — sample data should never run against production automatically.
 
 ---
 
