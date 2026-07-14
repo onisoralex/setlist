@@ -127,6 +127,19 @@ model TrackListSong {
   @@map("track_list_song")
 }
 
+// Records every login attempt (success or failure) so the login route can rate-limit by IP.
+// Self-pruning: the route deletes rows older than the rate-limit window on every request
+// instead of relying on a cron job -- see app/api/auth/login/route.ts.
+model LoginAttempt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ipAddress String   @map("ip_address")
+  succeeded Boolean
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([ipAddress, createdAt])
+  @@map("login_attempt")
+}
+
 // Singleton settings row -- the CHECK constraint (added via raw SQL in the migration,
 // Prisma has no native "exactly one row" constraint) enforces exactly one row.
 model Settings {

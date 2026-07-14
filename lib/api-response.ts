@@ -7,3 +7,4 @@ export const jsonError = (message: string, status: number) =>
 
 export const notFound = (message: string) => jsonError(message, 404);
 export const badRequest = (message: string) => jsonError(message, 400);
+export const tooManyRequests = (message: string) => jsonError(message, 429);
