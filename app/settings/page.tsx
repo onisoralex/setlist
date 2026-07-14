@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
 import type { Settings } from "@/lib/types";
 import styles from "./page.module.css";
@@ -68,6 +69,7 @@ const resolvedColorToHex = (value: string): string => {
 };
 
 const SettingsPage = () => {
+  const router = useRouter();
   const [settings, setSettings] = useState<Settings | null>(null);
   // Effective (resolved) colors for the "no override" case -- read from computed CSS on
   // mount, since that's the only way to know what color is currently showing when the DB
@@ -191,6 +193,16 @@ const SettingsPage = () => {
     }
   };
 
+  const handleLogout = async () => {
+    setError(null);
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+      router.push("/login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to log out");
+    }
+  };
+
   return (
     <div className={styles.page}>
       <h1>Settings</h1>
@@ -285,6 +297,13 @@ const SettingsPage = () => {
             </div>
           </fieldset>
         ))}
+      </div>
+
+      <div className={styles.form}>
+        <h2>Account</h2>
+        <button type="button" className="btn btnDanger" onClick={handleLogout}>
+          Log Out
+        </button>
       </div>
 
       {error && <p className={styles.error}>{error}</p>}

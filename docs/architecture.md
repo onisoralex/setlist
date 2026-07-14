@@ -15,7 +15,7 @@ Deviations from the Hive default web stack (`C:\hive\docs\tech-stack.md` §2 / "
 
 - **No shadcn/ui + Tailwind.** Plain CSS Modules with CSS custom properties instead. The UI surface is ~4-5 screens; a component library and a Tailwind build step add dependency weight this project doesn't need, and CSS Modules + variables already match the user's own global styling convention.
 - **No Railway.** Neon Postgres is provisioned directly through the Vercel Marketplace integration — there's no separate backend service to host, so Railway has no role here.
-- **No auth, billing, analytics, or ads packages.** Single user, no monetization — see "Platform Packages Used" below.
+- **No auth, billing, analytics, or ads packages.** Single user, no monetization — see "Platform Packages Used" below. (The app does gate itself behind one shared password now that it's deployed publicly — see the Auth row below — but that's a small in-app module, not a `@hive/*` platform package.)
 
 ## Tech Stack (this project)
 
@@ -26,7 +26,7 @@ Deviations from the Hive default web stack (`C:\hive\docs\tech-stack.md` §2 / "
 | Database | PostgreSQL (Neon) | Provisioned via Vercel Marketplace, not a standalone Neon account |
 | ORM | Prisma + `@prisma/adapter-neon` | Pooled connection for runtime queries, unpooled for migrations |
 | Styling | CSS Modules + CSS custom properties | No component library (deviation, see above) |
-| Auth | None | Single user, no login |
+| Auth | Shared password (`lib/auth.ts` + `middleware.ts`) | Single shared secret, no real user accounts — added once the app moved off localhost-only access |
 | Payments | None | Not monetized |
 | Analytics | None | Not needed for a personal tool |
 | Ads | None | Not applicable |
@@ -138,7 +138,7 @@ Five tables. Full DDL and rationale in `docs/specs/00-foundation.md` and the Hiv
 
 ## API Design
 
-REST/JSON under `/api/*`. Full endpoint list in `docs/specs/00-foundation.md` §2. No auth — every endpoint is open (this app is never exposed beyond the user's own devices/browser).
+REST/JSON under `/api/*`. Full endpoint list in `docs/specs/00-foundation.md` §2. Every endpoint (except `/api/auth/login`) requires the shared-password auth cookie, enforced by `middleware.ts` — see the Auth row above.
 
 ---
 

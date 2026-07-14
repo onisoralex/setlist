@@ -32,7 +32,7 @@ See `docs/architecture.md` "Project Folder Structure" (filled in once scaffolded
 
 - Follow the global CLAUDE.md defaults (double quotes, template literals, arrow functions, CSS custom properties for repeated values).
 - The song-versioning/override resolution logic (`docs/specs/00-foundation.md` §3) is the trickiest part of this codebase — keep it isolated in a clearly named module rather than inlined into route handlers, since it will be read and reasoned about far more than it will be changed.
-- No auth — every route and API endpoint is open. Do not add auth scaffolding "just in case."
+- The whole app is gated behind one shared password (`SITE_PASSWORD`), enforced in `middleware.ts` via `lib/auth.ts` — not real multi-user accounts, just a single login. Do not add further auth scaffolding "just in case."
 
 ## Key files
 

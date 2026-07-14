@@ -113,7 +113,7 @@ Foreign key behavior: `song_group` and `song` use `ON DELETE RESTRICT` because t
 
 ## 2. API Endpoints
 
-REST, JSON, no auth (single-user, never exposed publicly). All routes under `/api`.
+REST, JSON, gated by a single shared-password cookie (see `lib/auth.ts` + `middleware.ts` — single-user, but now deployed publicly, hence the gate). All routes under `/api`.
 
 **Songs**
 - `GET /api/songs` — list song groups, each showing its current version's summary fields (title, key, transpose, instrument). Excludes archived by default; `?includeArchived=true` to include them.
@@ -216,7 +216,7 @@ Not prescribing exact filenames — use Next.js App Router conventions (`app/api
 
 ## Assumptions
 
-- Single user, no auth, no concurrent-editing conflict handling (e.g. no optimistic locking on `track_list_song` updates) — acceptable given only one person ever uses this app.
+- Single user (one shared password, not real accounts — see `lib/auth.ts`), no concurrent-editing conflict handling (e.g. no optimistic locking on `track_list_song` updates) — acceptable given only one person ever uses this app.
 - `key`, `transpose`, and `instrument` remain free-text fields (per the user's own explicit choice) rather than structured/enumerated fields — the UI does not need dropdowns or validated formats for these.
 - No image/file upload anywhere in this app (chord sheets are plain text/markdown-ish, stored as a `text` column).
 - No requirement for full-text search beyond simple title matching on the song list — if the user wants richer search later, that's a future addition, not part of this spec.
