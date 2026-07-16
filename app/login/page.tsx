@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Button from "@mui/material/Button";
 import styles from "./page.module.css";
 
 const LoginPage = () => {
@@ -45,9 +46,9 @@ const LoginPage = () => {
           autoFocus
           required
         />
-        <button type="submit" className="btn btnPrimary" disabled={submitting}>
+        <Button type="submit" variant="contained" color="primary" disabled={submitting}>
           {submitting ? "Logging in..." : "Log In"}
-        </button>
+        </Button>
         {error && <p className={styles.error}>{error}</p>}
       </form>
     </div>

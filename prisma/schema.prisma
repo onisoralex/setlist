@@ -19,6 +19,10 @@ datasource db {
 model SongGroup {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title     String
+  // Optional German/English names, alongside the always-present Romanian `title`. Nullable and
+  // purely additive -- not versioned data, same reasoning as `title` itself (see comment above).
+  titleDe   String?  @map("title_de")
+  titleEn   String?  @map("title_en")
   archived  Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -164,6 +168,21 @@ model Settings {
   btnSecondaryColor      String? @map("btn_secondary_color")
   btnDangerBackground    String? @map("btn_danger_background")
   btnDangerColor         String? @map("btn_danger_color")
+
+  // Which fields the song list / combobox search matches against. Plain always-populated
+  // booleans (no meaningful "unset" state), unlike the nullable tri-state color fields above.
+  searchScopeName       Boolean @default(true) @map("search_scope_name")
+  searchScopeNotes      Boolean @default(true) @map("search_scope_notes")
+  searchScopeInstrument Boolean @default(true) @map("search_scope_instrument")
+  searchScopeKey        Boolean @default(true) @map("search_scope_key")
+  searchScopeChords     Boolean @default(true) @map("search_scope_chords")
+
+  // Height of a spacer ("blank line") entry on the read-only tracklist view. Required,
+  // always-populated CSS length, same shape as the font-size fields above.
+  spacerHeight String @default("2.5rem") @map("spacer_height")
+
+  // Nullable page-background override, same tri-state pattern as the btn* color fields above.
+  backgroundColor String? @map("background_color")
 
   @@map("settings")
 }

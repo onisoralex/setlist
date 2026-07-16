@@ -9,9 +9,15 @@ export type SongSummary = {
   id: string;
   archived: boolean;
   title: string;
+  titleDe: string | null;
+  titleEn: string | null;
   key: string;
   transpose: string;
   instrument: string;
+  // Widened for Phase E multi-scope search (spec §3.3) -- client-side filtering can't search
+  // fields it was never sent.
+  notes: string | null;
+  sheet: string | null;
 };
 
 export type SongVersionInfo = {
@@ -24,6 +30,8 @@ export type SongDetail = {
   id: string;
   archived: boolean;
   title: string;
+  titleDe: string | null;
+  titleEn: string | null;
   key: string;
   transpose: string;
   instrument: string;
@@ -53,6 +61,8 @@ export type ResolvedTrackListEntry =
       songGroupId: string;
       songId: string;
       title: string;
+      titleDe: string | null;
+      titleEn: string | null;
       key: string;
       transpose: string;
       instrument: string;
@@ -85,4 +95,11 @@ export type Settings = {
   btnSecondaryColor: string | null;
   btnDangerBackground: string | null;
   btnDangerColor: string | null;
+  searchScopeName: boolean;
+  searchScopeNotes: boolean;
+  searchScopeInstrument: boolean;
+  searchScopeKey: boolean;
+  searchScopeChords: boolean;
+  spacerHeight: string;
+  backgroundColor: string | null;
 };

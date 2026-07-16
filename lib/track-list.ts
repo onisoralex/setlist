@@ -22,6 +22,8 @@ export type ResolvedTrackListEntry =
       songGroupId: string;
       songId: string;
       title: string;
+      titleDe: string | null;
+      titleEn: string | null;
       key: string;
       transpose: string;
       instrument: string;
@@ -56,6 +58,11 @@ export const resolveTrackListEntry = (
     songGroupId: row.songGroupId!,
     songId: row.songId!,
     title: row.overrideTitle ?? song!.songGroup.title,
+    // No per-event override exists for these -- only the primary `title` is overridable
+    // (spec 00-foundation.md §1); German/English names are stable identity data, same
+    // reasoning as `title` itself, so they always come straight from the song group.
+    titleDe: song!.songGroup.titleDe,
+    titleEn: song!.songGroup.titleEn,
     key: row.overrideKey ?? song!.key,
     transpose: row.overrideTranspose ?? song!.transpose,
     instrument: row.overrideInstrument ?? song!.instrument,

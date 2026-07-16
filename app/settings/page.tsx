@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
 import { apiFetch } from "@/lib/api-client";
 import type { Settings } from "@/lib/types";
 import styles from "./page.module.css";
@@ -52,6 +54,8 @@ const BUTTON_COLOR_GROUPS: ButtonColorGroup[] = [
   },
 ];
 
+const PAGE_BACKGROUND_VAR = "--page-background";
+
 // getComputedStyle returns fully-resolved values (e.g. "rgb(37, 99, 235)"), not the hex the
 // <input type="color"> element requires -- render through an offscreen canvas pixel to
 // normalize any valid CSS color into "#rrggbb".
@@ -79,6 +83,7 @@ const SettingsPage = () => {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fontSizeErrors, setFontSizeErrors] = useState<Partial<Record<FontSizeField, string>>>({});
+  const [spacerHeightError, setSpacerHeightError] = useState<string | null>(null);
 
   // Only PATCH fields the user actually changed, mirroring the tracklist override editor's
   // "touched" tracking (app/events/[id]/edit/page.tsx) rather than resending everything.
@@ -95,6 +100,7 @@ const SettingsPage = () => {
           colors[group.backgroundVar] = resolvedColorToHex(computed.getPropertyValue(group.backgroundVar).trim());
           colors[group.colorVar] = resolvedColorToHex(computed.getPropertyValue(group.colorVar).trim());
         }
+        colors[PAGE_BACKGROUND_VAR] = resolvedColorToHex(computed.getPropertyValue(PAGE_BACKGROUND_VAR).trim());
         setDefaultColors(colors);
       })
       .catch((err) => setError(err.message))
@@ -112,9 +118,39 @@ const SettingsPage = () => {
         method: "PATCH",
         body: JSON.stringify({ octaveUpDisplaySymbol: settings.octaveUpDisplaySymbol }),
       });
+      // A plain fetch() to a Route Handler doesn't invalidate the client Router Cache the way
+      // a Server Action mutation would -- without this, the root layout's settings-driven
+      // <style> tag keeps rendering stale values until an unrelated navigation happens to
+      // refetch it.
+      router.refresh();
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
+    }
+  };
+
+  // Single-field immediate-save form, same shape as handleSymbolSubmit -- spacerHeight is a
+  // distinct concept from the font-size fields in the UI (it's under "Display", not "Font
+  // Sizes") even though it validates with the identical CSS-length rule.
+  const handleSpacerHeightSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setSaved(false);
+    if (!CSS_LENGTH_PATTERN.test(settings.spacerHeight)) {
+      setSpacerHeightError("Must be a CSS length like \"1.5rem\", \"24px\", or \"1.5em\"");
+      return;
+    }
+    setSpacerHeightError(null);
+    try {
+      const updated = await apiFetch<Settings>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ spacerHeight: settings.spacerHeight }),
+      });
+      setSettings(updated);
+      router.refresh();
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save spacer height");
     }
   };
 
@@ -152,6 +188,7 @@ const SettingsPage = () => {
       });
       setSettings(updated);
       touchedRef.current = {};
+      router.refresh();
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save font sizes");
@@ -172,6 +209,7 @@ const SettingsPage = () => {
         body: JSON.stringify({ [field]: value }),
       });
       setSettings(updated);
+      router.refresh();
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save color");
@@ -187,6 +225,7 @@ const SettingsPage = () => {
         body: JSON.stringify({ [field]: null }),
       });
       setSettings(updated);
+      router.refresh();
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to clear color");
@@ -208,35 +247,82 @@ const SettingsPage = () => {
       <h1>Settings</h1>
 
       <form className={styles.form} onSubmit={handleSymbolSubmit}>
-        <label className={styles.field}>
-          <span>Octave-up display symbol</span>
-          <input
-            value={settings.octaveUpDisplaySymbol}
-            onChange={(e) => setSettings({ ...settings, octaveUpDisplaySymbol: e.target.value })}
-            required
-          />
-          <span className={styles.hint}>
-            Chord sheets are stored with &quot;+&quot; internally and shown with this symbol instead.
-          </span>
-        </label>
-        <button type="submit" className="btn btnPrimary">
+        <TextField
+          label="Octave-up display symbol"
+          value={settings.octaveUpDisplaySymbol}
+          onChange={(e) => setSettings({ ...settings, octaveUpDisplaySymbol: e.target.value })}
+          required
+          helperText='Chord sheets are stored with "+" internally and shown with this symbol instead.'
+          className={styles.field}
+        />
+        <Button type="submit" variant="contained" color="primary">
           Save
-        </button>
+        </Button>
       </form>
 
       <form className={styles.form} onSubmit={handleFontSizeSubmit}>
         <h2>Font Sizes</h2>
         {FONT_SIZE_FIELDS.map(({ key, label }) => (
-          <label className={styles.field} key={key}>
-            <span>{label}</span>
-            <input value={settings[key]} onChange={(e) => handleFontSizeChange(key, e.target.value)} />
-            {fontSizeErrors[key] && <span className={styles.error}>{fontSizeErrors[key]}</span>}
-          </label>
+          <TextField
+            key={key}
+            label={label}
+            value={settings[key]}
+            onChange={(e) => handleFontSizeChange(key, e.target.value)}
+            error={Boolean(fontSizeErrors[key])}
+            helperText={fontSizeErrors[key]}
+            className={styles.field}
+          />
         ))}
-        <button type="submit" className="btn btnPrimary">
+        <Button type="submit" variant="contained" color="primary">
           Save Font Sizes
-        </button>
+        </Button>
       </form>
+
+      <form className={styles.form} onSubmit={handleSpacerHeightSubmit}>
+        <h2>Display</h2>
+        <TextField
+          label="Empty-line (spacer) height"
+          value={settings.spacerHeight}
+          onChange={(e) => setSettings({ ...settings, spacerHeight: e.target.value })}
+          required
+          error={Boolean(spacerHeightError)}
+          helperText={spacerHeightError ?? "Height of a blank-line entry on the read-only tracklist view."}
+          className={styles.field}
+        />
+        <Button type="submit" variant="contained" color="primary">
+          Save
+        </Button>
+      </form>
+
+      <div className={styles.form}>
+        <h2>Page Background</h2>
+        <fieldset className={styles.colorGroup}>
+          <legend>Background</legend>
+          <div className={styles.colorField}>
+            <label>
+              <span>Color</span>
+              <input
+                type="color"
+                value={settings.backgroundColor ?? defaultColors[PAGE_BACKGROUND_VAR] ?? "#000000"}
+                onChange={(e) => handleColorChange("backgroundColor", e.target.value)}
+              />
+            </label>
+            <span className={styles.badge}>{settings.backgroundColor ? "Custom" : "Default"}</span>
+            <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave("backgroundColor")}>
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="contained"
+              color="secondary"
+              onClick={() => handleColorClear("backgroundColor")}
+              disabled={!settings.backgroundColor}
+            >
+              Clear
+            </Button>
+          </div>
+        </fieldset>
+      </div>
 
       <div className={styles.form}>
         <h2>Button Colors</h2>
@@ -256,21 +342,18 @@ const SettingsPage = () => {
               <span className={styles.badge}>
                 {settings[group.backgroundField] ? "Custom" : "Default"}
               </span>
-              <button
-                type="button"
-                className="btn btnSecondary"
-                onClick={() => handleColorSave(group.backgroundField)}
-              >
+              <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave(group.backgroundField)}>
                 Save
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btnSecondary"
+                variant="contained"
+                color="secondary"
                 onClick={() => handleColorClear(group.backgroundField)}
                 disabled={!settings[group.backgroundField]}
               >
                 Clear
-              </button>
+              </Button>
             </div>
 
             <div className={styles.colorField}>
@@ -283,17 +366,18 @@ const SettingsPage = () => {
                 />
               </label>
               <span className={styles.badge}>{settings[group.colorField] ? "Custom" : "Default"}</span>
-              <button type="button" className="btn btnSecondary" onClick={() => handleColorSave(group.colorField)}>
+              <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave(group.colorField)}>
                 Save
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btnSecondary"
+                variant="contained"
+                color="secondary"
                 onClick={() => handleColorClear(group.colorField)}
                 disabled={!settings[group.colorField]}
               >
                 Clear
-              </button>
+              </Button>
             </div>
           </fieldset>
         ))}
@@ -301,9 +385,9 @@ const SettingsPage = () => {
 
       <div className={styles.form}>
         <h2>Account</h2>
-        <button type="button" className="btn btnDanger" onClick={handleLogout}>
+        <Button type="button" variant="contained" color="error" onClick={handleLogout}>
           Log Out
-        </button>
+        </Button>
       </div>
 
       {error && <p className={styles.error}>{error}</p>}

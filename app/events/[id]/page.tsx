@@ -3,10 +3,12 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Button from "@mui/material/Button";
 import EditEventModal from "@/components/EditEventModal";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDate } from "@/lib/date-format";
 import { applyOctaveUpSymbol } from "@/lib/notation";
+import { formatSongDisplayName } from "@/lib/song-display-name";
 import type { EventDetail, EventStatus, EventType, Settings } from "@/lib/types";
 import styles from "./page.module.css";
 
@@ -97,12 +99,12 @@ const EventPage = ({ params }: EventPageProps) => {
           </p>
         </div>
         <div className={styles.controls}>
-          <button className="btn btnSecondary" onClick={() => setEditingEvent(true)}>
+          <Button variant="contained" color="secondary" onClick={() => setEditingEvent(true)}>
             Edit Event
-          </button>
-          <Link href={`/events/${id}/edit`} className="btn btnSecondary">
+          </Button>
+          <Button component={Link} href={`/events/${id}/edit`} variant="contained" color="secondary">
             Edit Tracklist
-          </Link>
+          </Button>
         </div>
       </div>
 
@@ -118,21 +120,21 @@ const EventPage = ({ params }: EventPageProps) => {
 
       <div className={styles.controls}>
         {event.status === "draft" && (
-          <button className="btn btnSecondary" onClick={() => handleStatusChange("scheduled")}>
+          <Button variant="contained" color="secondary" onClick={() => handleStatusChange("scheduled")}>
             Mark Scheduled
-          </button>
+          </Button>
         )}
         {event.status === "scheduled" && (
-          <button className="btn btnSecondary" onClick={() => handleStatusChange("played")}>
+          <Button variant="contained" color="secondary" onClick={() => handleStatusChange("played")}>
             Mark Played
-          </button>
+          </Button>
         )}
-        <button className="btn btnSecondary" onClick={handleLockToggle}>
+        <Button variant="contained" color="secondary" onClick={handleLockToggle}>
           {event.lockedAt ? "Unlock" : "Lock"}
-        </button>
-        <button className="btn btnDanger" onClick={handleDelete}>
+        </Button>
+        <Button variant="contained" color="error" onClick={handleDelete}>
           Delete
-        </button>
+        </Button>
       </div>
 
       {event.songs.length === 0 && <p className={styles.empty}>No songs on this setlist yet.</p>}
@@ -150,7 +152,7 @@ const EventPage = ({ params }: EventPageProps) => {
                   className={styles.songRow}
                   onClick={() => setOpenSongId(openSongId === entry.id ? null : entry.id)}
                 >
-                  <span className={styles.songTitle}>{entry.title}</span>
+                  <span className={styles.songTitle}>{formatSongDisplayName(entry)}</span>
                   <span className={styles.songMeta}>
                     {entry.key} ({entry.transpose}) &middot; {entry.instrument}
                   </span>

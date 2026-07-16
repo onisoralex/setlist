@@ -5,7 +5,7 @@ A personal song-repertoire and setlist management webapp for a bass player in a 
 ## Tech stack
 
 - **Next.js (App Router)** — frontend + REST API (Route Handlers) in one deployable.
-- **PostgreSQL via Neon**, provisioned through the Vercel Marketplace integration.
+- **PostgreSQL via Neon** (connected manually in Vercel's env vars — set up directly through Neon's own signup, not the Vercel Marketplace integration; functionally identical either way).
 - **Prisma** ORM with `@prisma/adapter-neon`.
 - **CSS Modules + CSS custom properties** — no component library.
 - **Vercel** for hosting (frontend + API + DB integration).
@@ -33,6 +33,13 @@ See `docs/architecture.md` "Project Folder Structure" (filled in once scaffolded
 - Follow the global CLAUDE.md defaults (double quotes, template literals, arrow functions, CSS custom properties for repeated values).
 - The song-versioning/override resolution logic (`docs/specs/00-foundation.md` §3) is the trickiest part of this codebase — keep it isolated in a clearly named module rather than inlined into route handlers, since it will be read and reasoned about far more than it will be changed.
 - The whole app is gated behind one shared password (`SITE_PASSWORD`), enforced in `middleware.ts` via `lib/auth.ts` — not real multi-user accounts, just a single login. Do not add further auth scaffolding "just in case."
+
+## Deployment
+
+- Production: `https://setlist.hivefoundry.app` (Cloudflare CNAME → Vercel). Deploys off `main` via GitHub import.
+- `DATABASE_URL`, `DIRECT_DATABASE_URL`, and `SITE_PASSWORD` must be set in Vercel's project environment variables — none of these are inferred or auto-provisioned, they were set by hand.
+- The `build` script is `prisma migrate deploy && next build`, not just `next build` — every deploy applies any pending migrations before building, so a database reset or a fresh database with the same connection strings self-heals on the next deploy. Never bake `prisma db seed` into this — seed data must never run against production automatically.
+- To run a migration without a full deploy: `npx vercel link`, `npx vercel env pull .env.production.local --environment=production`, then `DOTENV_CONFIG_PATH=.env.production.local npx prisma migrate deploy` (delete that file afterward — it has real credentials).
 
 ## Key files
 

@@ -3,7 +3,8 @@ import Link from "next/link";
 import "./globals.css";
 import styles from "./layout.module.css";
 import { prisma } from "@/lib/prisma";
-import { isValidFontSize, isValidHexColor } from "@/lib/settings";
+import { isValidCssLength, isValidHexColor } from "@/lib/settings";
+import MuiThemeProvider from "@/components/MuiThemeProvider";
 
 export const metadata: Metadata = {
   title: "setlist",
@@ -33,10 +34,11 @@ const RootLayout = async ({ children }: Readonly<{ children: React.ReactNode }>)
     create: { id: SETTINGS_ID },
   });
 
-  // Font sizes are required fields, but still guarded here rather than trusted blindly --
-  // same defensive stance as the color fields below.
+  // Font sizes (and the spacer-height field, which shares the same CSS-length validation) are
+  // required fields, but still guarded here rather than trusted blindly -- same defensive
+  // stance as the color fields below.
   const fontSizeLine = (cssVar: string, value: string) =>
-    isValidFontSize(value) ? `${cssVar}: ${value};` : "";
+    isValidCssLength(value) ? `${cssVar}: ${value};` : "";
 
   const overrideStyle = `
     :root {
@@ -47,12 +49,14 @@ const RootLayout = async ({ children }: Readonly<{ children: React.ReactNode }>)
       ${fontSizeLine("--font-size-heading", settings.fontSizeHeading)}
       ${fontSizeLine("--font-size-nav-brand", settings.fontSizeNavBrand)}
       ${fontSizeLine("--font-size-nav-link", settings.fontSizeNavLink)}
+      ${fontSizeLine("--spacer-height", settings.spacerHeight)}
       ${buttonColorLine("--btn-primary-background", settings.btnPrimaryBackground)}
       ${buttonColorLine("--btn-primary-color", settings.btnPrimaryColor)}
       ${buttonColorLine("--btn-secondary-background", settings.btnSecondaryBackground)}
       ${buttonColorLine("--btn-secondary-color", settings.btnSecondaryColor)}
       ${buttonColorLine("--btn-danger-background", settings.btnDangerBackground)}
       ${buttonColorLine("--btn-danger-color", settings.btnDangerColor)}
+      ${buttonColorLine("--page-background", settings.backgroundColor)}
     }
   `;
 
@@ -62,17 +66,19 @@ const RootLayout = async ({ children }: Readonly<{ children: React.ReactNode }>)
         <style>{overrideStyle}</style>
       </head>
       <body>
-        <nav className={styles.nav}>
-          <Link href="/" className={styles.brand}>
-            setlist
-          </Link>
-          <div className={styles.links}>
-            <Link href="/songs">Songs</Link>
-            <Link href="/events">Events</Link>
-            <Link href="/settings">Settings</Link>
-          </div>
-        </nav>
-        <main className={styles.main}>{children}</main>
+        <MuiThemeProvider>
+          <nav className={styles.nav}>
+            <Link href="/" className={styles.brand}>
+              setlist
+            </Link>
+            <div className={styles.links}>
+              <Link href="/songs">Songs</Link>
+              <Link href="/events">Events</Link>
+              <Link href="/settings">Settings</Link>
+            </div>
+          </nav>
+          <main className={styles.main}>{children}</main>
+        </MuiThemeProvider>
       </body>
     </html>
   );

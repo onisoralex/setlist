@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Button from "@mui/material/Button";
 import DateField from "@/components/DateField";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDate } from "@/lib/date-format";
@@ -90,9 +91,9 @@ const EventsPage = () => {
             required
           />
         )}
-        <button type="submit" className="btn btnPrimary" disabled={creating}>
+        <Button type="submit" variant="contained" color="primary" disabled={creating}>
           {creating ? "Creating..." : "New Event"}
-        </button>
+        </Button>
       </form>
 
       {error && <p className={styles.error}>{error}</p>}
@@ -112,9 +113,9 @@ const EventsPage = () => {
                   {event.lockedAt ? " \u{1F512}" : ""}
                 </span>
               </Link>
-              <button className="btn btnDanger" onClick={() => handleDelete(event.id)}>
+              <Button variant="contained" color="error" onClick={() => handleDelete(event.id)}>
                 Delete
-              </button>
+              </Button>
             </div>
           </li>
         ))}

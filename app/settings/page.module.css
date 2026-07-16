@@ -11,26 +11,10 @@
   max-width: var(--max-width-content);
 }
 
+/* Applied directly to MUI TextField roots -- caps their width, MUI handles the rest of the
+   field's own styling (border, padding, label, helper text) internally. */
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  font-size: var(--font-size-sm);
-  color: var(--color-foreground-muted);
-}
-
-.field input {
-  padding: var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-foreground);
-  font-size: var(--font-size-md);
-  max-width: 6rem;
-}
-
-.hint {
-  font-size: var(--font-size-sm);
+  max-width: 12rem;
 }
 
 .error {

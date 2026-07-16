@@ -1,9 +1,17 @@
 "use client";
 
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import Autocomplete from "@mui/material/Autocomplete";
+import type { FilterOptionsState } from "@mui/material/useAutocomplete";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import NewSongModal from "@/components/NewSongModal";
+import SearchScopeChips from "@/components/SearchScopeChips";
 import { apiFetch } from "@/lib/api-client";
-import type { EventDetail, SongSummary } from "@/lib/types";
+import { formatSongDisplayName } from "@/lib/song-display-name";
+import { matchesSearch, scopesFromSettings, type SearchScopes } from "@/lib/song-search";
+import type { EventDetail, Settings, SongDetail, SongSummary } from "@/lib/types";
 import styles from "./page.module.css";
 
 type EditPageProps = { params: Promise<{ id: string }> };
@@ -19,8 +27,13 @@ const TracklistEditPage = ({ params }: EditPageProps) => {
   const { id } = use(params);
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [allSongs, setAllSongs] = useState<SongSummary[] | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [overrideTarget, setOverrideTarget] = useState<string | null>(null);
+  // Non-null while the "create '<query>' as a new song" flow from the combobox is open --
+  // holds the query text as the modal's initialTitle. Lives here (not in the combobox) since
+  // its onCreated needs to call handleAdd, which owns the tracklist-add API call.
+  const [newSongQuery, setNewSongQuery] = useState<string | null>(null);
 
   const load = () => {
     Promise.all([apiFetch<EventDetail>(`/api/events/${id}`), apiFetch<SongSummary[]>("/api/songs")])
@@ -32,6 +45,11 @@ const TracklistEditPage = ({ params }: EditPageProps) => {
   };
 
   useEffect(load, [id]);
+  useEffect(() => {
+    apiFetch<Settings>("/api/settings")
+      .then(setSettings)
+      .catch((err) => setError(err.message));
+  }, []);
 
   const handleAdd = async (songGroupId: string) => {
     try {
@@ -76,25 +94,43 @@ const TracklistEditPage = ({ params }: EditPageProps) => {
   };
 
   if (error) return <p className={styles.error}>{error}</p>;
-  if (!event || !allSongs) return <p>Loading...</p>;
+  if (!event || !allSongs || !settings) return <p>Loading...</p>;
 
   const availableSongs = allSongs.filter((s) => !s.archived);
+  const scopes = scopesFromSettings(settings);
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <h1>Edit Tracklist</h1>
-        <Link href={`/events/${id}`} className="btn btnSecondary">
+        <Button component={Link} href={`/events/${id}`} variant="contained" color="secondary">
           Done
-        </Link>
+        </Button>
       </div>
 
       <div className={styles.addRow}>
-        <SongSearchCombobox availableSongs={availableSongs} onAdd={handleAdd} />
-        <button type="button" className="btn btnSecondary" onClick={handleAddSpacer}>
+        <SongSearchCombobox
+          availableSongs={availableSongs}
+          scopes={scopes}
+          onAdd={handleAdd}
+          onCreateNew={setNewSongQuery}
+        />
+        <Button type="button" variant="contained" color="secondary" onClick={handleAddSpacer}>
           + Add Empty Line
-        </button>
+        </Button>
       </div>
+
+      <SearchScopeChips settings={settings} onChange={setSettings} />
+
+      <NewSongModal
+        open={newSongQuery !== null}
+        initialTitle={newSongQuery ?? undefined}
+        onCreated={(song: SongDetail) => {
+          setNewSongQuery(null);
+          handleAdd(song.id);
+        }}
+        onCancel={() => setNewSongQuery(null)}
+      />
 
       <ul className={styles.list}>
         {event.songs.map((entry, index) => (
@@ -103,68 +139,72 @@ const TracklistEditPage = ({ params }: EditPageProps) => {
               <div className={styles.rowMain}>
                 <span className={styles.spacerLabel}>&mdash; Empty Line &mdash;</span>
                 <div className={styles.rowActions}>
-                  <button
-                    className={`btn btnSecondary ${styles.compactButton}`}
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    size="small"
                     onClick={() => handleMove(index, -1)}
                     disabled={index === 0}
                     aria-label="Move up"
                   >
                     &uarr;
-                  </button>
-                  <button
-                    className={`btn btnSecondary ${styles.compactButton}`}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    size="small"
                     onClick={() => handleMove(index, 1)}
                     disabled={index === event.songs.length - 1}
                     aria-label="Move down"
                   >
                     &darr;
-                  </button>
-                  <button
-                    className={`btn btnDanger ${styles.compactButton}`}
-                    onClick={() => handleRemove(entry.id)}
-                  >
+                  </Button>
+                  <Button variant="contained" color="error" size="small" onClick={() => handleRemove(entry.id)}>
                     Remove
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
               <>
                 <div className={styles.rowMain}>
                   <div className={styles.rowInfo}>
-                    <span className={styles.title}>{entry.title}</span>
+                    <span className={styles.title}>{formatSongDisplayName(entry)}</span>
                     <span className={styles.meta}>
                       {entry.key} ({entry.transpose}) &middot; {entry.instrument}
                     </span>
                   </div>
                   <div className={styles.rowActions}>
-                    <button
-                      className={`btn btnSecondary ${styles.compactButton}`}
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="small"
+                      onClick={() => setOverrideTarget(overrideTarget === entry.id ? null : entry.id)}
+                    >
+                      Override
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="small"
                       onClick={() => handleMove(index, -1)}
                       disabled={index === 0}
                       aria-label="Move up"
                     >
                       &uarr;
-                    </button>
-                    <button
-                      className={`btn btnSecondary ${styles.compactButton}`}
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="small"
                       onClick={() => handleMove(index, 1)}
                       disabled={index === event.songs.length - 1}
                       aria-label="Move down"
                     >
                       &darr;
-                    </button>
-                    <button
-                      className={`btn btnSecondary ${styles.compactButton}`}
-                      onClick={() => setOverrideTarget(overrideTarget === entry.id ? null : entry.id)}
-                    >
-                      Override
-                    </button>
-                    <button
-                      className={`btn btnDanger ${styles.compactButton}`}
-                      onClick={() => handleRemove(entry.id)}
-                    >
+                    </Button>
+                    <Button variant="contained" color="error" size="small" onClick={() => handleRemove(entry.id)}>
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -190,85 +230,66 @@ const TracklistEditPage = ({ params }: EditPageProps) => {
 
 type SongSearchComboboxProps = {
   availableSongs: SongSummary[];
+  scopes: SearchScopes;
   onAdd: (songGroupId: string) => void;
+  onCreateNew: (query: string) => void;
 };
 
-// Search-as-you-type "add a song" combobox: typing filters availableSongs (same lowercase
-// substring match as the main song list at app/page.tsx), and clicking a result adds it
-// immediately -- there's no separate "Add" step. Click-outside/Escape-to-close mirrors the
-// popup pattern used by components/DateField.tsx.
-const SongSearchCombobox = ({ availableSongs, onAdd }: SongSearchComboboxProps) => {
-  const [songQuery, setSongQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+// Sentinel option injected by filterOptions when nothing matches and the user has typed
+// something -- the standard MUI "creatable Autocomplete" pattern (a real, keyboard-navigable
+// option rather than a plain unclickable message), see
+// https://mui.com/material-ui/react-autocomplete/#creatable.
+type CreateOption = { __create: true; inputValue: string };
+type SongOption = SongSummary | CreateOption;
 
-  const filteredSongs = useMemo(() => {
-    const q = songQuery.trim().toLowerCase();
-    if (!q) return availableSongs;
-    return availableSongs.filter((song) => song.title.toLowerCase().includes(q));
-  }, [availableSongs, songQuery]);
+const isCreateOption = (option: SongOption): option is CreateOption => "__create" in option;
 
-  useEffect(() => {
-    if (!open) return;
+// Search-as-you-type "add a song" combobox, built on MUI Autocomplete (spec §2.1/§2.2 Phase
+// E) -- sheds the hand-rolled click-outside/Escape/open-state logic the previous version
+// carried, Autocomplete provides all of that natively. Filtering uses the shared, diacritic-
+// insensitive, multi-scope predicate from lib/song-search.ts (spec §3.2/§3.3), same as the
+// song list. Selecting a result adds it immediately -- no separate "Add" step. The "no
+// matches" state additionally offers a "create as new song" option whenever the query is
+// non-empty (spec §3.7 entry point 2).
+const SongSearchCombobox = ({ availableSongs, scopes, onAdd, onCreateNew }: SongSearchComboboxProps) => {
+  const [inputValue, setInputValue] = useState("");
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
-  const handleSelect = (song: SongSummary) => {
-    onAdd(song.id);
-    setSongQuery("");
-    setOpen(false);
+  const filterOptions = (options: SongOption[], state: FilterOptionsState<SongOption>): SongOption[] => {
+    const matches = (options.filter((option) => !isCreateOption(option)) as SongSummary[]).filter((song) =>
+      matchesSearch(song, state.inputValue, scopes),
+    );
+    if (matches.length === 0 && state.inputValue.trim() !== "") {
+      return [{ __create: true, inputValue: state.inputValue.trim() }];
+    }
+    return matches;
   };
 
   return (
-    <div className={styles.combobox} ref={containerRef}>
-      <input
-        type="search"
-        className={styles.comboboxInput}
-        placeholder="Add a song..."
-        value={songQuery}
-        onChange={(e) => {
-          setSongQuery(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-      />
-      {open && (
-        <ul className={styles.comboboxResults}>
-          {filteredSongs.length === 0 ? (
-            <li className={styles.comboboxEmpty}>No matching songs</li>
-          ) : (
-            filteredSongs.map((song) => (
-              <li key={song.id}>
-                <button
-                  type="button"
-                  className={styles.comboboxOption}
-                  onClick={() => handleSelect(song)}
-                >
-                  {song.title}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
+    <Autocomplete<SongOption>
+      className={styles.combobox}
+      options={availableSongs}
+      filterOptions={filterOptions}
+      inputValue={inputValue}
+      onInputChange={(_event, value) => setInputValue(value)}
+      value={null}
+      onChange={(_event, option) => {
+        if (!option) return;
+        if (isCreateOption(option)) {
+          onCreateNew(option.inputValue);
+        } else {
+          onAdd(option.id);
+        }
+        setInputValue("");
+      }}
+      getOptionLabel={(option) => (isCreateOption(option) ? option.inputValue : formatSongDisplayName(option))}
+      renderOption={(props, option) => (
+        <li {...props} key={isCreateOption(option) ? "__create" : option.id}>
+          {isCreateOption(option) ? `+ Create "${option.inputValue}" as a new song` : formatSongDisplayName(option)}
+        </li>
       )}
-    </div>
+      renderInput={(params) => <TextField {...params} placeholder="Add a song..." size="small" />}
+      noOptionsText="No matching songs"
+    />
   );
 };
 
@@ -340,27 +361,23 @@ const OverrideEditor = ({ eventId, trackListSongId, current, onSaved }: Override
       </p>
       {(Object.keys(EMPTY_OVERRIDES) as (keyof typeof EMPTY_OVERRIDES)[]).map((field) => (
         <div key={field} className={styles.overrideField}>
-          <label>
-            <span>{field}</span>
-            <input
-              value={values[field]}
-              onChange={(e) => handleChange(field, e.target.value)}
-              placeholder={current[field] ?? ""}
-            />
-          </label>
-          <button
-            type="button"
-            className={`btn btnSecondary ${styles.compactButton}`}
-            onClick={() => handleClear(field)}
-          >
+          <TextField
+            label={field.charAt(0).toUpperCase() + field.slice(1)}
+            value={values[field]}
+            onChange={(e) => handleChange(field, e.target.value)}
+            placeholder={current[field] ?? ""}
+            size="small"
+            fullWidth
+          />
+          <Button type="button" variant="contained" color="secondary" size="small" onClick={() => handleClear(field)}>
             Clear
-          </button>
+          </Button>
         </div>
       ))}
       {error && <p className={styles.error}>{error}</p>}
-      <button type="submit" className="btn btnPrimary">
+      <Button type="submit" variant="contained" color="primary">
         Save Overrides
-      </button>
+      </Button>
     </form>
   );
 };

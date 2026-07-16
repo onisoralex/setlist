@@ -1,10 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
 import styles from "./SongForm.module.css";
 
 export type SongFormValues = {
   title: string;
+  titleDe: string;
+  titleEn: string;
   key: string;
   transpose: string;
   instrument: string;
@@ -21,12 +25,19 @@ type SongFormProps = {
 
 const EMPTY_VALUES: SongFormValues = {
   title: "",
+  titleDe: "",
+  titleEn: "",
   key: "",
   transpose: "",
   instrument: "",
   notes: "",
   sheet: "",
 };
+
+// Fields that save as the literal "?" when left blank at submit time, rather than blocking
+// the save (spec §4) -- these are already NOT NULL free-text columns, so "?" is just a
+// placeholder value, not a schema change.
+const QUESTION_MARK_DEFAULT_FIELDS = ["key", "transpose", "instrument"] as const;
 
 // Shared by the "new song" and "edit song" screens (spec §5) -- both always write a full set
 // of fields (edit always creates a new version via PATCH, never a partial per-event override,
@@ -47,7 +58,13 @@ const SongForm = ({ initialValues, submitLabel, onSubmit, onCancel }: SongFormPr
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit(values);
+      const normalized = { ...values };
+      for (const field of QUESTION_MARK_DEFAULT_FIELDS) {
+        if (normalized[field].trim() === "") {
+          normalized[field] = "?";
+        }
+      }
+      await onSubmit(normalized);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -57,53 +74,61 @@ const SongForm = ({ initialValues, submitLabel, onSubmit, onCancel }: SongFormPr
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
-      <label className={styles.field}>
-        <span>Title</span>
-        <input value={values.title} onChange={handleChange("title")} required />
-      </label>
+      <TextField
+        label="Title (Romanian)"
+        value={values.title}
+        onChange={handleChange("title")}
+        required
+        fullWidth
+      />
 
       <div className={styles.row}>
-        <label className={styles.field}>
-          <span>Key</span>
-          <input value={values.key} onChange={handleChange("key")} required />
-        </label>
-        <label className={styles.field}>
-          <span>Transpose</span>
-          <input value={values.transpose} onChange={handleChange("transpose")} required placeholder="+0" />
-        </label>
+        <TextField label="Title (German)" value={values.titleDe} onChange={handleChange("titleDe")} fullWidth />
+        <TextField label="Title (English)" value={values.titleEn} onChange={handleChange("titleEn")} fullWidth />
       </div>
 
-      <label className={styles.field}>
-        <span>Instrument</span>
-        <input value={values.instrument} onChange={handleChange("instrument")} required />
-      </label>
-
-      <label className={styles.field}>
-        <span>Notes</span>
-        <input value={values.notes} onChange={handleChange("notes")} placeholder="Optional" />
-      </label>
-
-      <label className={styles.field}>
-        <span>Chord Sheet</span>
-        <textarea
-          className={styles.sheet}
-          value={values.sheet}
-          onChange={handleChange("sheet")}
-          rows={12}
-          placeholder={"Use \"+\" to mark octave-up notes"}
+      <div className={styles.row}>
+        <TextField label="Key" value={values.key} onChange={handleChange("key")} fullWidth />
+        <TextField
+          label="Transpose"
+          value={values.transpose}
+          onChange={handleChange("transpose")}
+          placeholder="+0"
+          fullWidth
         />
-      </label>
+      </div>
+
+      <TextField label="Instrument" value={values.instrument} onChange={handleChange("instrument")} fullWidth />
+
+      <TextField
+        label="Notes"
+        value={values.notes}
+        onChange={handleChange("notes")}
+        placeholder="Optional"
+        fullWidth
+      />
+
+      <TextField
+        label="Chord Sheet"
+        className={styles.sheet}
+        value={values.sheet}
+        onChange={handleChange("sheet")}
+        placeholder={'Use "+" to mark octave-up notes'}
+        multiline
+        minRows={12}
+        fullWidth
+      />
 
       {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.actions}>
-        <button type="submit" className="btn btnPrimary" disabled={submitting}>
+        <Button type="submit" variant="contained" color="primary" disabled={submitting}>
           {submitting ? "Saving..." : submitLabel}
-        </button>
+        </Button>
         {onCancel && (
-          <button type="button" className="btn btnSecondary" onClick={onCancel}>
+          <Button type="button" variant="contained" color="secondary" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         )}
       </div>
     </form>

@@ -38,9 +38,10 @@
 }
 
 /* Renders the blank-line gap for group_break_before (spec §1) -- a plain spacer, not a
-   bordered element, so it reads as "a pause happens here" rather than a divider between songs. */
+   bordered element, so it reads as "a pause happens here" rather than a divider between songs.
+   Height is settings-driven (Settings page "Display") -- see --spacer-height in globals.css. */
 .groupBreak {
-  height: var(--space-xl);
+  height: var(--spacer-height);
 }
 
 .song {

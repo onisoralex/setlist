@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import styles from "./ChangeTitleModal.module.css";
 
 type ChangeTitleModalProps = {
@@ -11,29 +16,13 @@ type ChangeTitleModalProps = {
 
 // Small modal for renaming a song's title only. Sends a title-only PATCH body so the API
 // route's versioning logic (app/api/songs/[groupId]/route.ts) never runs -- title lives on
-// song_group and isn't versioned data. Dismiss-on-backdrop-click/Escape mirrors the pattern
-// in components/DateField.tsx, adapted for a modal backdrop rather than an outside-click ref.
+// song_group and isn't versioned data. Dialog provides backdrop-click/Escape/focus-trap/
+// aria-modal natively (spec §2.1), replacing the ~15 lines of hand-rolled equivalent this
+// component used to carry.
 const ChangeTitleModal = ({ currentTitle, onSave, onCancel }: ChangeTitleModalProps) => {
   const [title, setTitle] = useState(currentTitle);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
-  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      onCancel();
-    }
-  };
 
   const handleSave = async (submitEvent: React.FormEvent) => {
     submitEvent.preventDefault();
@@ -53,27 +42,29 @@ const ChangeTitleModal = ({ currentTitle, onSave, onCancel }: ChangeTitleModalPr
   };
 
   return (
-    <div className={styles.backdrop} onClick={handleBackdropClick}>
-      <form className={styles.panel} onSubmit={handleSave}>
-        <h2 className={styles.heading}>Rename Song</h2>
-        <input
-          className={styles.input}
-          type="text"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          autoFocus
-        />
-        {error && <p className={styles.error}>{error}</p>}
-        <div className={styles.actions}>
-          <button type="button" className="btn btnSecondary" onClick={onCancel} disabled={saving}>
+    <Dialog open onClose={onCancel} fullWidth maxWidth="xs">
+      <form onSubmit={handleSave}>
+        <DialogTitle>Rename Song</DialogTitle>
+        <DialogContent className={styles.content}>
+          <input
+            className={styles.input}
+            type="text"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            autoFocus
+          />
+          {error && <p className={styles.error}>{error}</p>}
+        </DialogContent>
+        <DialogActions>
+          <Button type="button" variant="contained" color="secondary" onClick={onCancel} disabled={saving}>
             Cancel
-          </button>
-          <button type="submit" className="btn btnPrimary" disabled={saving}>
+          </Button>
+          <Button type="submit" variant="contained" color="primary" disabled={saving}>
             {saving ? "Saving..." : "Save"}
-          </button>
-        </div>
+          </Button>
+        </DialogActions>
       </form>
-    </div>
+    </Dialog>
   );
 };
 

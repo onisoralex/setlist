@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SongForm, { type SongFormValues } from "@/components/SongForm";
 import { apiFetch } from "@/lib/api-client";
+import { formatSongDisplayName } from "@/lib/song-display-name";
 import type { SongDetail } from "@/lib/types";
 
 type SongEditPageProps = { params: Promise<{ groupId: string }> };
@@ -28,6 +29,8 @@ const SongEditPage = ({ params }: SongEditPageProps) => {
       method: "PATCH",
       body: JSON.stringify({
         title: values.title,
+        titleDe: values.titleDe || null,
+        titleEn: values.titleEn || null,
         key: values.key,
         transpose: values.transpose,
         instrument: values.instrument,
@@ -43,11 +46,13 @@ const SongEditPage = ({ params }: SongEditPageProps) => {
 
   return (
     <div>
-      <h1>Edit {song.title}</h1>
+      <h1>Edit {formatSongDisplayName(song)}</h1>
       <p>Saving creates a new version and applies it everywhere this song is used (unless an event is played or locked).</p>
       <SongForm
         initialValues={{
           title: song.title,
+          titleDe: song.titleDe ?? "",
+          titleEn: song.titleEn ?? "",
           key: song.key,
           transpose: song.transpose,
           instrument: song.instrument,

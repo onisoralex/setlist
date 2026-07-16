@@ -31,9 +31,16 @@ export const GET = async (request: NextRequest) => {
         id: group.id,
         archived: group.archived,
         title: group.title,
+        titleDe: group.titleDe,
+        titleEn: group.titleEn,
         key: current.key,
         transpose: current.transpose,
         instrument: current.instrument,
+        // Widened for Phase E multi-scope search (spec §3.3) -- client-side filtering can't
+        // search fields it was never sent. Deliberate payload-size tradeoff at this app's
+        // single-user, dozens-to-low-hundreds-of-songs scale.
+        notes: current.notes,
+        sheet: current.sheet,
       };
     });
 
@@ -57,9 +64,21 @@ export const POST = async (request: NextRequest) => {
   if (typeof body.instrument !== "string") {
     return badRequest("instrument is required");
   }
+  if ("titleDe" in body && body.titleDe !== null && typeof body.titleDe !== "string") {
+    return badRequest("titleDe must be a string or null");
+  }
+  if ("titleEn" in body && body.titleEn !== null && typeof body.titleEn !== "string") {
+    return badRequest("titleEn must be a string or null");
+  }
 
   const result = await prisma.$transaction(async (tx) => {
-    const group = await tx.songGroup.create({ data: { title: body.title } });
+    const group = await tx.songGroup.create({
+      data: {
+        title: body.title,
+        titleDe: typeof body.titleDe === "string" ? body.titleDe : null,
+        titleEn: typeof body.titleEn === "string" ? body.titleEn : null,
+      },
+    });
     const song = await tx.song.create({
       data: {
         songGroupId: group.id,
@@ -79,6 +98,8 @@ export const POST = async (request: NextRequest) => {
       id: result.group.id,
       archived: result.group.archived,
       title: result.group.title,
+      titleDe: result.group.titleDe,
+      titleEn: result.group.titleEn,
       key: result.song.key,
       transpose: result.song.transpose,
       instrument: result.song.instrument,

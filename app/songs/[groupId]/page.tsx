@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDateTime } from "@/lib/date-format";
 import { applyOctaveUpSymbol } from "@/lib/notation";
+import { formatSongDisplayName } from "@/lib/song-display-name";
 import type { SongDetail, Settings } from "@/lib/types";
 import styles from "./page.module.css";
 
@@ -37,7 +38,7 @@ const SongDetailPage = ({ params }: SongDetailPageProps) => {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1>{song.title}</h1>
+          <h1>{formatSongDisplayName(song)}</h1>
           <p className={styles.meta}>
             {song.key} ({song.transpose}) &middot; {song.instrument}
           </p>

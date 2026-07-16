@@ -24,6 +24,8 @@ export const GET = async (_request: NextRequest, { params }: RouteParams) => {
     id: group.id,
     archived: group.archived,
     title: group.title,
+    titleDe: group.titleDe,
+    titleEn: group.titleEn,
     key: current.key,
     transpose: current.transpose,
     instrument: current.instrument,
@@ -56,6 +58,26 @@ export const PATCH = async (request: NextRequest, { params }: RouteParams) => {
     title = body.title;
   }
 
+  // titleDe/titleEn ride along in the same direct song_group update as title -- none of the
+  // three are versioned data (spec §3.1 of 00-foundation.md / mui-and-fixes spec §3.1).
+  let titleDe: string | null | undefined;
+  if ("titleDe" in body) {
+    if (body.titleDe !== null && typeof body.titleDe !== "string") {
+      return badRequest("titleDe must be a string or null");
+    }
+    titleDe = body.titleDe;
+  }
+
+  let titleEn: string | null | undefined;
+  if ("titleEn" in body) {
+    if (body.titleEn !== null && typeof body.titleEn !== "string") {
+      return badRequest("titleEn must be a string or null");
+    }
+    titleEn = body.titleEn;
+  }
+
+  const hasGroupFields = title !== undefined || titleDe !== undefined || titleEn !== undefined;
+
   const patch: Record<string, unknown> = {};
   for (const field of ["key", "transpose", "instrument"] as const) {
     if (field in body) {
@@ -78,10 +100,16 @@ export const PATCH = async (request: NextRequest, { params }: RouteParams) => {
 
   try {
     const { group, currentVersion } = await prisma.$transaction(async (tx) => {
-      const updatedGroup =
-        title !== undefined
-          ? await tx.songGroup.update({ where: { id: groupId }, data: { title } })
-          : await tx.songGroup.findUnique({ where: { id: groupId } });
+      const updatedGroup = hasGroupFields
+        ? await tx.songGroup.update({
+            where: { id: groupId },
+            data: {
+              ...(title !== undefined ? { title } : {}),
+              ...(titleDe !== undefined ? { titleDe } : {}),
+              ...(titleEn !== undefined ? { titleEn } : {}),
+            },
+          })
+        : await tx.songGroup.findUnique({ where: { id: groupId } });
 
       if (!updatedGroup) {
         throw new SongGroupNotFoundError(groupId);
@@ -102,6 +130,8 @@ export const PATCH = async (request: NextRequest, { params }: RouteParams) => {
       id: group.id,
       archived: group.archived,
       title: group.title,
+      titleDe: group.titleDe,
+      titleEn: group.titleEn,
       key: currentVersion.key,
       transpose: currentVersion.transpose,
       instrument: currentVersion.instrument,

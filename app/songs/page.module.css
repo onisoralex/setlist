@@ -20,6 +20,17 @@
   max-width: 24rem;
 }
 
+.sortGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.sortLabel {
+  font-size: var(--font-size-sm);
+  color: var(--color-foreground-muted);
+}
+
 .error {
   color: var(--color-danger);
 }
@@ -69,8 +80,4 @@
   display: flex;
   gap: var(--space-xs);
   padding-right: var(--space-sm);
-}
-
-.compactButton {
-  padding: var(--space-sm) var(--space-md);
 }
