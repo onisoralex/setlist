@@ -1,0 +1,32 @@
+/* Shared "pinned toolbar, scrollable content" pattern for pages living inside <main>
+   (app/layout.tsx). <main> already has a fallback overflow-y: auto (app/layout.module.css), so
+   no page is forced to use this -- opt in only when part of the page (a search box, filter
+   controls, a page title) should stay fixed on screen while another part scrolls beneath it.
+
+   Usage: apply .shell to the page's root wrapper -- it fills exactly the height <main> allots
+   it and clips its own overflow, so <main>'s fallback scroll never engages. Apply .area to the
+   one inner element that should actually scroll (a list <ul>, or a wrapper div around a group
+   of sections). Everything inside .shell but outside .area stays pinned above it.
+
+   import scroll from "@/app/scroll.module.css";
+   <div className={`${styles.page} ${scroll.shell}`}>
+     <Toolbar />                                         (pinned)
+     <ul className={`${styles.list} ${scroll.area}`}>...</ul>  (scrolls)
+   </div>
+
+   Used by app/songs/page.tsx, app/events/page.tsx, app/settings/page.tsx. MUI Dialogs are
+   unaffected -- they portal outside this flow and manage their own internal scroll. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

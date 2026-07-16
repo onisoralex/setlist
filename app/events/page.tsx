@@ -7,6 +7,7 @@ import DateField from "@/components/DateField";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDate } from "@/lib/date-format";
 import type { EventStatus, EventSummary, EventType } from "@/lib/types";
+import scroll from "@/app/scroll.module.css";
 import styles from "./page.module.css";
 
 const EVENT_TYPE_LABELS: Record<EventType, string> = {
@@ -72,7 +73,7 @@ const EventsPage = () => {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${scroll.shell}`}>
       <h1>Events</h1>
 
       <form className={styles.createForm} onSubmit={handleCreate}>
@@ -100,7 +101,7 @@ const EventsPage = () => {
       {!events && !error && <p>Loading...</p>}
       {events && events.length === 0 && <p className={styles.empty}>No events yet.</p>}
 
-      <ul className={styles.list}>
+      <ul className={`${styles.list} ${scroll.area}`}>
         {events?.map((event) => (
           <li key={event.id} className={styles.row}>
             <div className={styles.rowLink}>

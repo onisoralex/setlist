@@ -6,6 +6,9 @@
   border-bottom: 1px solid var(--color-border);
   gap: var(--space-lg);
   flex-wrap: wrap;
+  /* Never shrink to make room for <main> -- body no longer scrolls (see globals.css), so the
+     nav must keep its full intrinsic height and stay pinned above the scrolling content. */
+  flex-shrink: 0;
 }
 
 .brand {
@@ -25,8 +28,17 @@
   color: var(--color-foreground);
 }
 
+/* min-height: 0 lets this flex item shrink below its content's intrinsic height -- without it
+   flex items refuse to shrink, and overflow-y: auto never gets a chance to engage. Acts as a
+   fallback scroll container for any page that doesn't opt into the pinned-toolbar pattern in
+   app/scroll.module.css (song detail, event detail, tracklist editor, login) -- their content
+   scrolls here instead of the whole document, so the nav still stays pinned for them too. Pages
+   that do opt into app/scroll.module.css fill this box exactly (height: 100%) and handle their
+   own internal scrolling, so this fallback never engages for them. */
 .main {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   width: 100%;
   max-width: var(--max-width-desktop);
   margin: 0 auto;

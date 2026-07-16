@@ -43,3 +43,7 @@ next-env.d.ts
 
 # prisma generated client (regenerated via `prisma generate` / `prisma migrate dev`)
 /generated/
+
+# developer-created bookkeeping for tracking background dev-server processes across tasks
+.dev-server.log
+.dev-server.pid

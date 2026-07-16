@@ -6,6 +6,7 @@ import Button from "@mui/material/Button";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import ChangeTitleModal from "@/components/ChangeTitleModal";
+import EditSongModal from "@/components/EditSongModal";
 import NewSongModal from "@/components/NewSongModal";
 import SearchScopeChips from "@/components/SearchScopeChips";
 import { apiFetch } from "@/lib/api-client";
@@ -13,6 +14,7 @@ import { chromaticKeyRank } from "@/lib/musical-key-order";
 import { formatSongDisplayName } from "@/lib/song-display-name";
 import { matchesSearch, scopesFromSettings } from "@/lib/song-search";
 import type { Settings, SongSummary } from "@/lib/types";
+import scroll from "@/app/scroll.module.css";
 import styles from "./page.module.css";
 
 type SortBy = "name" | "key-alpha" | "key-chromatic";
@@ -25,6 +27,7 @@ const SongListPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<SongSummary | null>(null);
   const [newSongOpen, setNewSongOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<string | null>(null);
 
   const loadSongs = () => {
     apiFetch<SongSummary[]>("/api/songs")
@@ -82,8 +85,13 @@ const SongListPage = () => {
     loadSongs();
   };
 
+  const handleSongSaved = () => {
+    setEditTarget(null);
+    loadSongs();
+  };
+
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${scroll.shell}`}>
       <div className={styles.header}>
         <h1>Songs</h1>
         <Button type="button" variant="contained" color="primary" onClick={() => setNewSongOpen(true)}>
@@ -120,7 +128,7 @@ const SongListPage = () => {
       {!songs && !error && <p>Loading...</p>}
       {songs && filtered.length === 0 && <p className={styles.empty}>No songs found.</p>}
 
-      <ul className={styles.list}>
+      <ul className={`${styles.list} ${scroll.area}`}>
         {filtered.map((song) => (
           <li key={song.id} className={styles.row}>
             <Link href={`/songs/${song.id}`} className={styles.rowLink}>
@@ -130,7 +138,7 @@ const SongListPage = () => {
               </span>
             </Link>
             <div className={styles.rowActions}>
-              <Button component={Link} href={`/songs/${song.id}/edit`} variant="contained" color="secondary" size="small">
+              <Button type="button" variant="contained" color="secondary" size="small" onClick={() => setEditTarget(song.id)}>
                 Edit
               </Button>
               <Button type="button" variant="contained" color="secondary" size="small" onClick={() => setRenameTarget(song)}>
@@ -156,6 +164,13 @@ const SongListPage = () => {
           loadSongs();
         }}
         onCancel={() => setNewSongOpen(false)}
+      />
+
+      <EditSongModal
+        open={editTarget !== null}
+        groupId={editTarget ?? ""}
+        onSaved={handleSongSaved}
+        onCancel={() => setEditTarget(null)}
       />
     </div>
   );

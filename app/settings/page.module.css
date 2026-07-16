@@ -4,6 +4,15 @@
   gap: var(--space-md);
 }
 
+/* Wraps everything below the pinned <h1> -- combined with .area from app/scroll.module.css to
+   become the page's actual scroll container, so it needs its own gap now that it's no longer a
+   direct child of .page (which supplied that spacing before). */
+.scrollContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
 .form {
   display: flex;
   flex-direction: column;

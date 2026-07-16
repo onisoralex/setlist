@@ -1,69 +1,25 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use } from "react";
 import { useRouter } from "next/navigation";
-import SongForm, { type SongFormValues } from "@/components/SongForm";
-import { apiFetch } from "@/lib/api-client";
-import { formatSongDisplayName } from "@/lib/song-display-name";
-import type { SongDetail } from "@/lib/types";
+import EditSongModal from "@/components/EditSongModal";
 
 type SongEditPageProps = { params: Promise<{ groupId: string }> };
 
-// Saving here always calls PATCH /api/songs/:groupId, which creates a new version (spec
-// §3.1) -- there is deliberately no "just this event" edit path from this screen; that only
-// exists from the tracklist editor's override form.
+// Kept as a dedicated route (rather than redirecting straight to /songs) so a bookmarked or
+// deep-linked URL still works -- renders the same modal the song list's "Edit" button opens,
+// pre-opened, and both outcomes land back on /songs. Mirrors app/songs/new/page.tsx.
 const SongEditPage = ({ params }: SongEditPageProps) => {
   const { groupId } = use(params);
   const router = useRouter();
-  const [song, setSong] = useState<SongDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiFetch<SongDetail>(`/api/songs/${groupId}`)
-      .then(setSong)
-      .catch((err) => setError(err.message));
-  }, [groupId]);
-
-  const handleSubmit = async (values: SongFormValues) => {
-    await apiFetch(`/api/songs/${groupId}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        title: values.title,
-        titleDe: values.titleDe || null,
-        titleEn: values.titleEn || null,
-        key: values.key,
-        transpose: values.transpose,
-        instrument: values.instrument,
-        notes: values.notes || null,
-        sheet: values.sheet || null,
-      }),
-    });
-    router.push(`/songs/${groupId}`);
-  };
-
-  if (error) return <p>{error}</p>;
-  if (!song) return <p>Loading...</p>;
 
   return (
-    <div>
-      <h1>Edit {formatSongDisplayName(song)}</h1>
-      <p>Saving creates a new version and applies it everywhere this song is used (unless an event is played or locked).</p>
-      <SongForm
-        initialValues={{
-          title: song.title,
-          titleDe: song.titleDe ?? "",
-          titleEn: song.titleEn ?? "",
-          key: song.key,
-          transpose: song.transpose,
-          instrument: song.instrument,
-          notes: song.notes ?? "",
-          sheet: song.sheet ?? "",
-        }}
-        submitLabel="Save New Version"
-        onSubmit={handleSubmit}
-        onCancel={() => router.push(`/songs/${groupId}`)}
-      />
-    </div>
+    <EditSongModal
+      open
+      groupId={groupId}
+      onSaved={() => router.push("/songs")}
+      onCancel={() => router.push("/songs")}
+    />
   );
 };
 

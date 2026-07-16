@@ -76,8 +76,13 @@ body {
   overflow-x: hidden;
 }
 
+/* Bounded to the viewport (not min-height) with overflow hidden -- the document itself never
+   scrolls. The nav bar (a direct child, see app/layout.tsx) then stays fixed on screen while
+   <main> owns a fallback scroll (app/layout.module.css), and individual pages can opt into a
+   pinned-toolbar + scrollable-content layout via app/scroll.module.css. */
 body {
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   color: var(--color-foreground);

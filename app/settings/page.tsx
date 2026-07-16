@@ -6,6 +6,7 @@ import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import { apiFetch } from "@/lib/api-client";
 import type { Settings } from "@/lib/types";
+import scroll from "@/app/scroll.module.css";
 import styles from "./page.module.css";
 
 const CSS_LENGTH_PATTERN = /^[0-9]+(\.[0-9]+)?(rem|px|em)$/;
@@ -243,155 +244,157 @@ const SettingsPage = () => {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${scroll.shell}`}>
       <h1>Settings</h1>
 
-      <form className={styles.form} onSubmit={handleSymbolSubmit}>
-        <TextField
-          label="Octave-up display symbol"
-          value={settings.octaveUpDisplaySymbol}
-          onChange={(e) => setSettings({ ...settings, octaveUpDisplaySymbol: e.target.value })}
-          required
-          helperText='Chord sheets are stored with "+" internally and shown with this symbol instead.'
-          className={styles.field}
-        />
-        <Button type="submit" variant="contained" color="primary">
-          Save
-        </Button>
-      </form>
-
-      <form className={styles.form} onSubmit={handleFontSizeSubmit}>
-        <h2>Font Sizes</h2>
-        {FONT_SIZE_FIELDS.map(({ key, label }) => (
+      <div className={`${styles.scrollContent} ${scroll.area}`}>
+        <form className={styles.form} onSubmit={handleSymbolSubmit}>
           <TextField
-            key={key}
-            label={label}
-            value={settings[key]}
-            onChange={(e) => handleFontSizeChange(key, e.target.value)}
-            error={Boolean(fontSizeErrors[key])}
-            helperText={fontSizeErrors[key]}
+            label="Octave-up display symbol"
+            value={settings.octaveUpDisplaySymbol}
+            onChange={(e) => setSettings({ ...settings, octaveUpDisplaySymbol: e.target.value })}
+            required
+            helperText='Chord sheets are stored with "+" internally and shown with this symbol instead.'
             className={styles.field}
           />
-        ))}
-        <Button type="submit" variant="contained" color="primary">
-          Save Font Sizes
-        </Button>
-      </form>
+          <Button type="submit" variant="contained" color="primary">
+            Save
+          </Button>
+        </form>
 
-      <form className={styles.form} onSubmit={handleSpacerHeightSubmit}>
-        <h2>Display</h2>
-        <TextField
-          label="Empty-line (spacer) height"
-          value={settings.spacerHeight}
-          onChange={(e) => setSettings({ ...settings, spacerHeight: e.target.value })}
-          required
-          error={Boolean(spacerHeightError)}
-          helperText={spacerHeightError ?? "Height of a blank-line entry on the read-only tracklist view."}
-          className={styles.field}
-        />
-        <Button type="submit" variant="contained" color="primary">
-          Save
-        </Button>
-      </form>
+        <form className={styles.form} onSubmit={handleFontSizeSubmit}>
+          <h2>Font Sizes</h2>
+          {FONT_SIZE_FIELDS.map(({ key, label }) => (
+            <TextField
+              key={key}
+              label={label}
+              value={settings[key]}
+              onChange={(e) => handleFontSizeChange(key, e.target.value)}
+              error={Boolean(fontSizeErrors[key])}
+              helperText={fontSizeErrors[key]}
+              className={styles.field}
+            />
+          ))}
+          <Button type="submit" variant="contained" color="primary">
+            Save Font Sizes
+          </Button>
+        </form>
 
-      <div className={styles.form}>
-        <h2>Page Background</h2>
-        <fieldset className={styles.colorGroup}>
-          <legend>Background</legend>
-          <div className={styles.colorField}>
-            <label>
-              <span>Color</span>
-              <input
-                type="color"
-                value={settings.backgroundColor ?? defaultColors[PAGE_BACKGROUND_VAR] ?? "#000000"}
-                onChange={(e) => handleColorChange("backgroundColor", e.target.value)}
-              />
-            </label>
-            <span className={styles.badge}>{settings.backgroundColor ? "Custom" : "Default"}</span>
-            <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave("backgroundColor")}>
-              Save
-            </Button>
-            <Button
-              type="button"
-              variant="contained"
-              color="secondary"
-              onClick={() => handleColorClear("backgroundColor")}
-              disabled={!settings.backgroundColor}
-            >
-              Clear
-            </Button>
-          </div>
-        </fieldset>
-      </div>
+        <form className={styles.form} onSubmit={handleSpacerHeightSubmit}>
+          <h2>Display</h2>
+          <TextField
+            label="Empty-line (spacer) height"
+            value={settings.spacerHeight}
+            onChange={(e) => setSettings({ ...settings, spacerHeight: e.target.value })}
+            required
+            error={Boolean(spacerHeightError)}
+            helperText={spacerHeightError ?? "Height of a blank-line entry on the read-only tracklist view."}
+            className={styles.field}
+          />
+          <Button type="submit" variant="contained" color="primary">
+            Save
+          </Button>
+        </form>
 
-      <div className={styles.form}>
-        <h2>Button Colors</h2>
-        {BUTTON_COLOR_GROUPS.map((group) => (
-          <fieldset className={styles.colorGroup} key={group.label}>
-            <legend>{group.label}</legend>
-
+        <div className={styles.form}>
+          <h2>Page Background</h2>
+          <fieldset className={styles.colorGroup}>
+            <legend>Background</legend>
             <div className={styles.colorField}>
               <label>
-                <span>Background</span>
+                <span>Color</span>
                 <input
                   type="color"
-                  value={(settings[group.backgroundField] as string | null) ?? defaultColors[group.backgroundVar] ?? "#000000"}
-                  onChange={(e) => handleColorChange(group.backgroundField, e.target.value)}
+                  value={settings.backgroundColor ?? defaultColors[PAGE_BACKGROUND_VAR] ?? "#000000"}
+                  onChange={(e) => handleColorChange("backgroundColor", e.target.value)}
                 />
               </label>
-              <span className={styles.badge}>
-                {settings[group.backgroundField] ? "Custom" : "Default"}
-              </span>
-              <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave(group.backgroundField)}>
+              <span className={styles.badge}>{settings.backgroundColor ? "Custom" : "Default"}</span>
+              <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave("backgroundColor")}>
                 Save
               </Button>
               <Button
                 type="button"
                 variant="contained"
                 color="secondary"
-                onClick={() => handleColorClear(group.backgroundField)}
-                disabled={!settings[group.backgroundField]}
-              >
-                Clear
-              </Button>
-            </div>
-
-            <div className={styles.colorField}>
-              <label>
-                <span>Text</span>
-                <input
-                  type="color"
-                  value={(settings[group.colorField] as string | null) ?? defaultColors[group.colorVar] ?? "#000000"}
-                  onChange={(e) => handleColorChange(group.colorField, e.target.value)}
-                />
-              </label>
-              <span className={styles.badge}>{settings[group.colorField] ? "Custom" : "Default"}</span>
-              <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave(group.colorField)}>
-                Save
-              </Button>
-              <Button
-                type="button"
-                variant="contained"
-                color="secondary"
-                onClick={() => handleColorClear(group.colorField)}
-                disabled={!settings[group.colorField]}
+                onClick={() => handleColorClear("backgroundColor")}
+                disabled={!settings.backgroundColor}
               >
                 Clear
               </Button>
             </div>
           </fieldset>
-        ))}
-      </div>
+        </div>
 
-      <div className={styles.form}>
-        <h2>Account</h2>
-        <Button type="button" variant="contained" color="error" onClick={handleLogout}>
-          Log Out
-        </Button>
-      </div>
+        <div className={styles.form}>
+          <h2>Button Colors</h2>
+          {BUTTON_COLOR_GROUPS.map((group) => (
+            <fieldset className={styles.colorGroup} key={group.label}>
+              <legend>{group.label}</legend>
 
-      {error && <p className={styles.error}>{error}</p>}
-      {saved && <p className={styles.saved}>Saved.</p>}
+              <div className={styles.colorField}>
+                <label>
+                  <span>Background</span>
+                  <input
+                    type="color"
+                    value={(settings[group.backgroundField] as string | null) ?? defaultColors[group.backgroundVar] ?? "#000000"}
+                    onChange={(e) => handleColorChange(group.backgroundField, e.target.value)}
+                  />
+                </label>
+                <span className={styles.badge}>
+                  {settings[group.backgroundField] ? "Custom" : "Default"}
+                </span>
+                <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave(group.backgroundField)}>
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => handleColorClear(group.backgroundField)}
+                  disabled={!settings[group.backgroundField]}
+                >
+                  Clear
+                </Button>
+              </div>
+
+              <div className={styles.colorField}>
+                <label>
+                  <span>Text</span>
+                  <input
+                    type="color"
+                    value={(settings[group.colorField] as string | null) ?? defaultColors[group.colorVar] ?? "#000000"}
+                    onChange={(e) => handleColorChange(group.colorField, e.target.value)}
+                  />
+                </label>
+                <span className={styles.badge}>{settings[group.colorField] ? "Custom" : "Default"}</span>
+                <Button type="button" variant="contained" color="secondary" onClick={() => handleColorSave(group.colorField)}>
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => handleColorClear(group.colorField)}
+                  disabled={!settings[group.colorField]}
+                >
+                  Clear
+                </Button>
+              </div>
+            </fieldset>
+          ))}
+        </div>
+
+        <div className={styles.form}>
+          <h2>Account</h2>
+          <Button type="button" variant="contained" color="error" onClick={handleLogout}>
+            Log Out
+          </Button>
+        </div>
+
+        {error && <p className={styles.error}>{error}</p>}
+        {saved && <p className={styles.saved}>Saved.</p>}
+      </div>
     </div>
   );
 };
