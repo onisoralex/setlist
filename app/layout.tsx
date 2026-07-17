@@ -5,6 +5,8 @@ import styles from "./layout.module.css";
 import { prisma } from "@/lib/prisma";
 import { isValidCssLength, isValidHexColor } from "@/lib/settings";
 import MuiThemeProvider from "@/components/MuiThemeProvider";
+import HeaderTitleProvider from "@/components/HeaderTitleProvider";
+import HeaderTitle from "@/components/HeaderTitle";
 
 export const metadata: Metadata = {
   title: "setlist",
@@ -67,17 +69,17 @@ const RootLayout = async ({ children }: Readonly<{ children: React.ReactNode }>)
       </head>
       <body>
         <MuiThemeProvider>
-          <nav className={styles.nav}>
-            <Link href="/" className={styles.brand}>
-              setlist
-            </Link>
-            <div className={styles.links}>
-              <Link href="/songs">Songs</Link>
-              <Link href="/events">Events</Link>
-              <Link href="/settings">Settings</Link>
-            </div>
-          </nav>
-          <main className={styles.main}>{children}</main>
+          <HeaderTitleProvider>
+            <nav className={styles.nav}>
+              <HeaderTitle />
+              <div className={styles.links}>
+                <Link href="/songs">Songs</Link>
+                <Link href="/events">Events</Link>
+                <Link href="/settings">Settings</Link>
+              </div>
+            </nav>
+            <main className={styles.main}>{children}</main>
+          </HeaderTitleProvider>
         </MuiThemeProvider>
       </body>
     </html>

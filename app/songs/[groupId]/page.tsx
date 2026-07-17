@@ -1,11 +1,13 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Link from "next/link";
+import Button from "@mui/material/Button";
+import EditSongModal from "@/components/EditSongModal";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDateTime } from "@/lib/date-format";
 import { applyOctaveUpSymbol } from "@/lib/notation";
 import { formatSongDisplayName } from "@/lib/song-display-name";
+import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import type { SongDetail, Settings } from "@/lib/types";
 import styles from "./page.module.css";
 
@@ -16,8 +18,9 @@ const SongDetailPage = ({ params }: SongDetailPageProps) => {
   const [song, setSong] = useState<SongDetail | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
-  useEffect(() => {
+  const loadSong = () => {
     Promise.all([
       apiFetch<SongDetail>(`/api/songs/${groupId}`),
       apiFetch<Settings>("/api/settings"),
@@ -27,7 +30,11 @@ const SongDetailPage = ({ params }: SongDetailPageProps) => {
         setSettings(settingsResult);
       })
       .catch((err) => setError(err.message));
-  }, [groupId]);
+  };
+
+  useEffect(loadSong, [groupId]);
+
+  useSetHeaderTitle(song ? formatSongDisplayName(song) : "");
 
   if (error) return <p className={styles.error}>{error}</p>;
   if (!song || !settings) return <p>Loading...</p>;
@@ -37,15 +44,12 @@ const SongDetailPage = ({ params }: SongDetailPageProps) => {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <div>
-          <h1>{formatSongDisplayName(song)}</h1>
-          <p className={styles.meta}>
-            {song.key} ({song.transpose}) &middot; {song.instrument}
-          </p>
-        </div>
-        <Link href={`/songs/${groupId}/edit`} className={styles.editButton}>
+        <p className={styles.meta}>
+          {song.key} ({song.transpose}) &middot; {song.instrument}
+        </p>
+        <Button type="button" variant="contained" color="secondary" size="small" onClick={() => setEditOpen(true)}>
           Edit
-        </Link>
+        </Button>
       </div>
 
       {song.notes && <p className={styles.notes}>{song.notes}</p>}
@@ -68,6 +72,16 @@ const SongDetailPage = ({ params }: SongDetailPageProps) => {
           </ul>
         </details>
       )}
+
+      <EditSongModal
+        open={editOpen}
+        groupId={groupId}
+        onSaved={() => {
+          setEditOpen(false);
+          loadSong();
+        }}
+        onCancel={() => setEditOpen(false)}
+      />
     </div>
   );
 };

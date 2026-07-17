@@ -15,10 +15,14 @@
 }
 
 .popup {
-  position: absolute;
-  top: calc(100% + var(--space-xs));
-  left: 0;
-  z-index: 10;
+  /* top/left are set inline from getBoundingClientRect() -- fixed positioning plus a
+     document.body portal lets this escape any clipping/scrolling ancestor (e.g. an MUI
+     Dialog's DialogContent). margin-top keeps the same visual gap below the trigger that
+     the old "calc(100% + var(--space-xs))" produced. z-index must clear MUI's Dialog/Modal
+     default of 1300. */
+  position: fixed;
+  margin-top: var(--space-xs);
+  z-index: 1400;
   padding: var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

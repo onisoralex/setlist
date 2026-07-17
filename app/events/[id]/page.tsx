@@ -1,10 +1,11 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import Link from "next/link";
+import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@mui/material/Button";
 import EditEventModal from "@/components/EditEventModal";
+import TracklistEditModal from "@/components/TracklistEditModal";
+import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDate } from "@/lib/date-format";
 import { applyOctaveUpSymbol } from "@/lib/notation";
@@ -37,6 +38,7 @@ const EventPage = ({ params }: EventPageProps) => {
   const [error, setError] = useState<string | null>(null);
   const [openSongId, setOpenSongId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState(false);
+  const [editingTracklist, setEditingTracklist] = useState(false);
 
   const load = () => {
     Promise.all([
@@ -51,6 +53,28 @@ const EventPage = ({ params }: EventPageProps) => {
   };
 
   useEffect(load, [id]);
+
+  // Composite date + type/status header content (spec: date at the nav brand's own size,
+  // type/status/lock immediately after at the smaller .meta size, all on one line). Memoized
+  // on `event` -- useSetHeaderTitle re-fires its effect whenever the node it's given is a new
+  // reference, and a fresh JSX element would otherwise be created on every render (e.g. every
+  // openSongId toggle), causing an unnecessary churn of context updates.
+  const headerTitle = useMemo(() => {
+    if (!event) return null;
+    return (
+      <>
+        {formatGermanDate(event.date)}
+        <span className={styles.meta}>
+          {" "}
+          {event.name ?? EVENT_TYPE_LABELS[event.type]}
+          {event.name ? ` (${EVENT_TYPE_LABELS[event.type]})` : ""} &middot;{" "}
+          {EVENT_STATUS_LABELS[event.status]}
+          {event.lockedAt ? " \u{1F512} locked" : ""}
+        </span>
+      </>
+    );
+  }, [event]);
+  useSetHeaderTitle(headerTitle);
 
   const handleStatusChange = async (status: string) => {
     await apiFetch(`/api/events/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
@@ -88,24 +112,13 @@ const EventPage = ({ params }: EventPageProps) => {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1>{formatGermanDate(event.date)}</h1>
-          <p className={styles.meta}>
-            {event.name ?? EVENT_TYPE_LABELS[event.type]}
-            {event.name ? ` (${EVENT_TYPE_LABELS[event.type]})` : ""} &middot;{" "}
-            {EVENT_STATUS_LABELS[event.status]}
-            {event.lockedAt ? " \u{1F512} locked" : ""}
-          </p>
-        </div>
-        <div className={styles.controls}>
-          <Button variant="contained" color="secondary" onClick={() => setEditingEvent(true)}>
-            Edit Event
-          </Button>
-          <Button component={Link} href={`/events/${id}/edit`} variant="contained" color="secondary">
-            Edit Tracklist
-          </Button>
-        </div>
+      <div className={styles.controls}>
+        <Button variant="contained" color="secondary" onClick={() => setEditingEvent(true)}>
+          Edit Event
+        </Button>
+        <Button variant="contained" color="secondary" onClick={() => setEditingTracklist(true)}>
+          Edit Tracklist
+        </Button>
       </div>
 
       {editingEvent && (
@@ -113,29 +126,24 @@ const EventPage = ({ params }: EventPageProps) => {
           currentDate={event.date.slice(0, 10)}
           currentType={event.type}
           currentName={event.name}
+          currentStatus={event.status}
+          lockedAt={event.lockedAt}
           onSave={handleEditEvent}
           onCancel={() => setEditingEvent(false)}
+          onStatusChange={handleStatusChange}
+          onLockToggle={handleLockToggle}
+          onDelete={handleDelete}
         />
       )}
 
-      <div className={styles.controls}>
-        {event.status === "draft" && (
-          <Button variant="contained" color="secondary" onClick={() => handleStatusChange("scheduled")}>
-            Mark Scheduled
-          </Button>
-        )}
-        {event.status === "scheduled" && (
-          <Button variant="contained" color="secondary" onClick={() => handleStatusChange("played")}>
-            Mark Played
-          </Button>
-        )}
-        <Button variant="contained" color="secondary" onClick={handleLockToggle}>
-          {event.lockedAt ? "Unlock" : "Lock"}
-        </Button>
-        <Button variant="contained" color="error" onClick={handleDelete}>
-          Delete
-        </Button>
-      </div>
+      <TracklistEditModal
+        open={editingTracklist}
+        eventId={id}
+        onDone={() => {
+          setEditingTracklist(false);
+          load();
+        }}
+      />
 
       {event.songs.length === 0 && <p className={styles.empty}>No songs on this setlist yet.</p>}
 

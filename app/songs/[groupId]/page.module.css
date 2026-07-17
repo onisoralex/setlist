@@ -16,16 +16,6 @@
   font-size: var(--font-size-sm);
 }
 
-.editButton {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .notes {
   color: var(--color-foreground-muted);
   font-style: italic;

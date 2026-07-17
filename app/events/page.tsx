@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Button from "@mui/material/Button";
 import DateField from "@/components/DateField";
+import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDate } from "@/lib/date-format";
 import type { EventStatus, EventSummary, EventType } from "@/lib/types";
@@ -23,6 +24,8 @@ const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
 };
 
 const EventsPage = () => {
+  useSetHeaderTitle("Events");
+
   const [events, setEvents] = useState<EventSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -74,8 +77,6 @@ const EventsPage = () => {
 
   return (
     <div className={`${styles.page} ${scroll.shell}`}>
-      <h1>Events</h1>
-
       <form className={styles.createForm} onSubmit={handleCreate}>
         <DateField value={date} onChange={setDate} />
         <select value={type} onChange={(e) => setType(e.target.value as EventType)}>
@@ -92,8 +93,17 @@ const EventsPage = () => {
             required
           />
         )}
-        <Button type="submit" variant="contained" color="primary" disabled={creating}>
-          {creating ? "Creating..." : "New Event"}
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          // sx, not the CSS module -- MUI's own emotion-injected button styles load after this
+          // app's CSS modules (see components/MuiThemeProvider.tsx's comments on load order),
+          // so a plain module class's margin-left: auto gets silently overridden. sx wins.
+          sx={{ marginLeft: "auto" }}
+          disabled={creating}
+        >
+          {creating ? "Creating..." : "+ New Event"}
         </Button>
       </form>
 

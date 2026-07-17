@@ -31,7 +31,8 @@ export const GET = async (request: NextRequest) => {
           }
         : {}),
     },
-    orderBy: { date: "asc" },
+    // Most recent event first (spec change per user feedback) -- was "asc".
+    orderBy: { date: "desc" },
   });
 
   return NextResponse.json(events);

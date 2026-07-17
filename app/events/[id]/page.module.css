@@ -4,17 +4,13 @@
   gap: var(--space-md);
 }
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-}
-
+/* Reused for the type/status/lock text rendered inline in the nav's title slot (see
+   useSetHeaderTitle in page.tsx) -- font-weight: 400 overrides the bold inherited from the nav
+   brand link's own font-weight: 700, since only the date portion should read as bold. */
 .meta {
   color: var(--color-foreground-muted);
   font-size: var(--font-size-sm);
+  font-weight: 400;
 }
 
 .controls {

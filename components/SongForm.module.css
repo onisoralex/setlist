@@ -3,6 +3,12 @@
   flex-direction: column;
   gap: var(--space-md);
   max-width: var(--max-width-content);
+  /* The first field's outlined-label, when shrunk (has a value or is focused), is absolutely
+     positioned a few px above its own border -- fine when preceded by normal spacing, but
+     MUI's DialogTitle + DialogContent rule zeroes the DialogContent's padding-top, so with no
+     margin here the label clips against the dialog's edge. Applies even when this form isn't
+     in a dialog, but "invisible now, no downside" beats a modal-specific override. */
+  margin-top: var(--space-md);
 }
 
 .row {

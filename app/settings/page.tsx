@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import { apiFetch } from "@/lib/api-client";
+import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import type { Settings } from "@/lib/types";
 import scroll from "@/app/scroll.module.css";
 import styles from "./page.module.css";
@@ -74,6 +75,8 @@ const resolvedColorToHex = (value: string): string => {
 };
 
 const SettingsPage = () => {
+  useSetHeaderTitle("Settings");
+
   const router = useRouter();
   const [settings, setSettings] = useState<Settings | null>(null);
   // Effective (resolved) colors for the "no override" case -- read from computed CSS on
@@ -245,8 +248,6 @@ const SettingsPage = () => {
 
   return (
     <div className={`${styles.page} ${scroll.shell}`}>
-      <h1>Settings</h1>
-
       <div className={`${styles.scrollContent} ${scroll.area}`}>
         <form className={styles.form} onSubmit={handleSymbolSubmit}>
           <TextField

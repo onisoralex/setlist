@@ -9,6 +9,7 @@ import ChangeTitleModal from "@/components/ChangeTitleModal";
 import EditSongModal from "@/components/EditSongModal";
 import NewSongModal from "@/components/NewSongModal";
 import SearchScopeChips from "@/components/SearchScopeChips";
+import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import { apiFetch } from "@/lib/api-client";
 import { chromaticKeyRank } from "@/lib/musical-key-order";
 import { formatSongDisplayName } from "@/lib/song-display-name";
@@ -20,6 +21,8 @@ import styles from "./page.module.css";
 type SortBy = "name" | "key-alpha" | "key-chromatic";
 
 const SongListPage = () => {
+  useSetHeaderTitle("Songs");
+
   const [songs, setSongs] = useState<SongSummary[] | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [query, setQuery] = useState("");
@@ -92,22 +95,30 @@ const SongListPage = () => {
 
   return (
     <div className={`${styles.page} ${scroll.shell}`}>
-      <div className={styles.header}>
-        <h1>Songs</h1>
-        <Button type="button" variant="contained" color="primary" onClick={() => setNewSongOpen(true)}>
+      <div className={styles.toolbarRow}>
+        <input
+          className={styles.search}
+          type="search"
+          placeholder="Search..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+
+        {settings && <SearchScopeChips settings={settings} onChange={setSettings} />}
+
+        <Button
+          type="button"
+          variant="contained"
+          color="primary"
+          // sx, not the CSS module -- MUI's own emotion-injected button styles load after this
+          // app's CSS modules (see components/MuiThemeProvider.tsx's comments on load order),
+          // so a plain module class's margin-left: auto gets silently overridden. sx wins.
+          sx={{ marginLeft: "auto" }}
+          onClick={() => setNewSongOpen(true)}
+        >
           + New Song
         </Button>
       </div>
-
-      <input
-        className={styles.search}
-        type="search"
-        placeholder="Search..."
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-
-      {settings && <SearchScopeChips settings={settings} onChange={setSettings} />}
 
       <div className={styles.sortGroup}>
         <span className={styles.sortLabel}>Sorting</span>

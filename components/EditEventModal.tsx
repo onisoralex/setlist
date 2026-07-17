@@ -11,23 +11,51 @@ import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import DateField from "@/components/DateField";
-import type { EventType } from "@/lib/types";
+import type { EventStatus, EventType } from "@/lib/types";
 import styles from "./EditEventModal.module.css";
+
+// Duplicated from app/events/[id]/page.tsx and app/events/page.tsx rather than shared --
+// consistent with how those two files already each carry their own copy.
+const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
+  draft: "Draft",
+  scheduled: "Scheduled",
+  played: "Played",
+};
 
 type EditEventModalProps = {
   currentDate: string;
   currentType: EventType;
   currentName: string | null;
+  currentStatus: EventStatus;
+  lockedAt: string | null;
   onSave: (values: { date: string; type: EventType; name: string | null }) => Promise<void> | void;
   onCancel: () => void;
+  onStatusChange: (status: string) => Promise<void> | void;
+  onLockToggle: () => Promise<void> | void;
+  onDelete: () => Promise<void> | void;
 };
 
-// Modal for editing an event's date/type/name. Dialog provides backdrop-click/Escape/
-// focus-trap/aria-modal natively (spec §2.1), same as components/ChangeTitleModal.tsx. The
-// event-type <select> stays plain HTML -- migrating it to MUI Select is Phase D, not this
+// Modal for editing an event's date/type/name, plus the status/lock/delete controls that used
+// to live as a second button row on the event detail page. Dialog provides backdrop-click/
+// Escape/focus-trap/aria-modal natively (spec §2.1), same as components/ChangeTitleModal.tsx.
+// The event-type <select> stays plain HTML -- migrating it to MUI Select is Phase D, not this
 // task. The name field's conditional reveal (required when type is "other") mirrors the
 // create form in app/events/page.tsx -- not worth sharing ~10 lines of logic across the two.
-const EditEventModal = ({ currentDate, currentType, currentName, onSave, onCancel }: EditEventModalProps) => {
+// Status/lock/delete are immediate-effect (call straight through to the parent's handlers,
+// which hit the API right away) -- deliberately separate from the date/type/name fields below,
+// which only take effect via the form's own Save/Cancel.
+const EditEventModal = ({
+  currentDate,
+  currentType,
+  currentName,
+  currentStatus,
+  lockedAt,
+  onSave,
+  onCancel,
+  onStatusChange,
+  onLockToggle,
+  onDelete,
+}: EditEventModalProps) => {
   const [date, setDate] = useState(currentDate);
   const [type, setType] = useState<EventType>(currentType);
   const [name, setName] = useState(currentName ?? "");
@@ -81,6 +109,41 @@ const EditEventModal = ({ currentDate, currentType, currentName, onSave, onCance
             />
           )}
           {error && <p className={styles.error}>{error}</p>}
+
+          <div className={styles.statusSection}>
+            <p className={styles.statusLabel}>
+              {EVENT_STATUS_LABELS[currentStatus]}
+              {lockedAt ? " \u{1F512} locked" : ""}
+            </p>
+            <div className={styles.statusActions}>
+              {currentStatus === "draft" && (
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => onStatusChange("scheduled")}
+                >
+                  Mark Scheduled
+                </Button>
+              )}
+              {currentStatus === "scheduled" && (
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => onStatusChange("played")}
+                >
+                  Mark Played
+                </Button>
+              )}
+              <Button type="button" variant="contained" color="secondary" onClick={onLockToggle}>
+                {lockedAt ? "Unlock" : "Lock"}
+              </Button>
+              <Button type="button" variant="contained" color="error" onClick={onDelete}>
+                Delete
+              </Button>
+            </div>
+          </div>
         </DialogContent>
         <DialogActions>
           <Button type="button" variant="contained" color="secondary" onClick={onCancel} disabled={saving}>

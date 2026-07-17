@@ -105,6 +105,8 @@ const SongForm = ({ initialValues, submitLabel, onSubmit, onCancel }: SongFormPr
         value={values.notes}
         onChange={handleChange("notes")}
         placeholder="Optional"
+        multiline
+        minRows={3}
         fullWidth
       />
 

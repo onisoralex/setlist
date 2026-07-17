@@ -4,11 +4,13 @@
   gap: var(--space-md);
 }
 
-.header {
+/* Toolbar line 1: search + scope chips, with "+ New Song" pushed to the far right via
+   .newSongButton's margin-left: auto. */
+.toolbarRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .search {
@@ -16,7 +18,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  width: 100%;
+  flex: 1;
+  min-width: 12rem;
   max-width: 24rem;
 }
 

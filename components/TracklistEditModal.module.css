@@ -1,40 +1,32 @@
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-}
-
 .error {
   color: var(--color-danger);
 }
 
-.addRow {
+.topRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 /* MUI Autocomplete handles its own popup/option styling internally -- this just sizes the
-   root within .addRow's flex layout, same role the old hand-rolled combobox's wrapper had. */
+   root within .topRow's flex layout, same role the old hand-rolled combobox's wrapper had. */
 .combobox {
   flex: 1;
   min-width: 12rem;
 }
 
+/* The row list is the one part of this Dialog that scrolls -- .topRow above stays pinned.
+   min-height: 0 lets this flex item shrink below its content's intrinsic height, the same
+   fix app/layout.module.css's .main documents for the same flex-scroll gotcha. */
 .list {
   list-style: none;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .row {
@@ -126,3 +118,9 @@
   flex: 1;
 }
 
+/* Multiline fields (notes/sheet) grow several rows tall -- flex-end (the default above) would
+   center the short "Clear" button against the bottom of a tall textarea, which looks odd, so
+   pin it to the top of the field instead. */
+.overrideFieldMultiline {
+  align-items: flex-start;
+}
