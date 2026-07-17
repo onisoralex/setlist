@@ -13,6 +13,14 @@
   gap: var(--space-md);
 }
 
+/* Same clipped-label issue as components/SongForm.module.css: the first section sits directly
+   against .scrollContent's zero-padding top edge, so its floating label has no room to shrink
+   into. Only the first child needs this -- every section after it already gets clearance from
+   .scrollContent's gap above it. */
+.scrollContent > :first-child {
+  margin-top: var(--space-md);
+}
+
 .form {
   display: flex;
   flex-direction: column;
