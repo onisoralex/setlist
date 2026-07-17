@@ -5,6 +5,10 @@ import { prisma } from "../lib/prisma";
 const SONGS = [
   {
     title: "10,000 Reasons (Bless the Lord)",
+    // Demonstrates formatSongDisplayName's "romanian | german | english" join (the other three
+    // songs deliberately leave these null/unset -- that's the far more common case).
+    titleDe: "Zehntausend Gründe",
+    titleEn: "10,000 Reasons",
     key: "E",
     transpose: "+0",
     instrument: "bass",
@@ -40,10 +44,12 @@ const SONGS = [
 const seed = async () => {
   console.log("Seeding songs...");
   const songGroups = [];
-  for (const { title, ...songFields } of SONGS) {
+  for (const { title, titleDe, titleEn, ...songFields } of SONGS) {
     const group = await prisma.songGroup.create({
       data: {
         title,
+        titleDe: titleDe ?? null,
+        titleEn: titleEn ?? null,
         songs: {
           create: { version: 1, ...songFields },
         },
@@ -72,6 +78,28 @@ const seed = async () => {
     },
   });
   console.log(`  created event ${event.id} with ${songGroups.length} songs`);
+
+  console.log("Seeding a second, played+locked event...");
+  // Reuses the first two song groups' current version rather than creating new songs -- this
+  // event exists to exercise status/lock semantics (spec 00-foundation.md §3.2), not to add
+  // more repertoire. lockedAt set alongside status "played" since in real use a played event is
+  // the case that actually gets manually frozen.
+  const pastEvent = await prisma.event.create({
+    data: {
+      date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      type: "sunday_evening",
+      status: "played",
+      lockedAt: new Date(),
+      trackListSongs: {
+        create: songGroups.slice(0, 2).map((group, position) => ({
+          songGroupId: group.id,
+          songId: group.songs[0].id,
+          position,
+        })),
+      },
+    },
+  });
+  console.log(`  created event ${pastEvent.id} (played, locked)`);
 
   console.log("Seeding settings...");
   await prisma.settings.upsert({
