@@ -28,8 +28,10 @@ const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
 };
 
 // The primary mobile live-use screen (spec §5): a vertical scrolling list of resolved song
-// fields, with tap-through to the full chord sheet. Kept deliberately terse per row -- title,
-// key/transpose, instrument only -- since this is read at a music stand, not a desk.
+// fields, with tap-through to the full chord sheet. Each row is kept terse -- title,
+// key/transpose, instrument -- since this is read at a music stand, not a desk. Notes are
+// shown directly under the row (no tap needed) since they're often load-bearing at a glance;
+// only the chord sheet stays behind the tap-to-expand panel.
 const EventPage = ({ params }: EventPageProps) => {
   const { id } = use(params);
   const router = useRouter();
@@ -165,9 +167,9 @@ const EventPage = ({ params }: EventPageProps) => {
                     {entry.key} ({entry.transpose}) &middot; {entry.instrument}
                   </span>
                 </button>
+                {entry.notes && <p className={styles.notes}>{entry.notes}</p>}
                 {openSongId === entry.id && (
                   <div className={styles.sheetPanel}>
-                    {entry.notes && <p className={styles.notes}>{entry.notes}</p>}
                     {entry.sheet ? (
                       <pre className={styles.sheet}>
                         {applyOctaveUpSymbol(entry.sheet, settings.octaveUpDisplaySymbol)}
