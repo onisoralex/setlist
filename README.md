@@ -77,9 +77,14 @@ Unlike a typical Hive Docker setup, the Next.js app itself is **not** containeri
 
 ```bash
 docker compose up -d     # start (or resume) the local Postgres container
+npm run dev              # start Next.js
+```
+
+### Stopping the dev server
+
+```bash
 docker compose down      # stop
 docker compose down -v   # stop and delete the database volume
-npm run dev              # start Next.js
 ```
 
 ### Database changes

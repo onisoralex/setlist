@@ -1,4 +1,5 @@
-import type { Song, SongGroup, TrackListSong } from "../generated/prisma/client";
+import type { Prisma, Song, SongGroup, TrackListSong } from "../generated/prisma/client";
+import type { TracklistBatchEntry } from "@/lib/types";
 
 // `title` lives on the song's group, not on `song` itself (see prisma/schema.prisma SongGroup
 // comment) -- resolveTrackListEntry needs the group's title alongside the versioned fields, so
@@ -117,3 +118,107 @@ export class InvalidOverrideValueError extends Error {
     this.name = "InvalidOverrideValueError";
   }
 }
+
+/**
+ * Diffs the full desired ordered tracklist (`entries`) against what's currently in the DB for
+ * `eventId` and writes creates/deletes/reorders/override-patches in one pass (spec
+ * tracklist-batch-save §2.5). Replaces the four separate immediate-effect routes (add/remove/
+ * reorder/override) this editor used to call one at a time. Caller (the PUT .../tracklist route
+ * handler) is responsible for request validation (§2.4) and running this inside
+ * `prisma.$transaction` -- this function assumes `entries` is already known-valid (every
+ * non-null id belongs to this event and matches its stored entryType/songGroupId,
+ * songGroupId/version resolved for new song rows) and does no validation of its own.
+ *
+ * `resolvedCurrentVersionId` maps a new (id === null) song entry's songGroupId to the
+ * already-resolved current-version Song id to snapshot into track_list_song.song_id -- resolved
+ * by the caller during validation (§2.4 step 5) so this function doesn't need to re-query it.
+ */
+export const commitTracklistBatch = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  entries: TracklistBatchEntry[],
+  resolvedCurrentVersionId: Map<string, string>,
+): Promise<void> => {
+  const existingRows = await tx.trackListSong.findMany({ where: { eventId } });
+
+  const submittedIds = new Set(entries.map((entry) => entry.id).filter((id): id is string => id !== null));
+  const toDeleteIds = existingRows.filter((row) => !submittedIds.has(row.id)).map((row) => row.id);
+
+  // Step 1: delete rows dropped from the tracklist. Must happen before the position-parking
+  // pass below so a deleted row's old position can never collide with a parked/created one.
+  if (toDeleteIds.length > 0) {
+    await tx.trackListSong.deleteMany({ where: { id: { in: toDeleteIds } } });
+  }
+
+  const keepEntries = entries.filter((entry) => entry.id !== null);
+  const createEntries = entries.filter((entry) => entry.id === null);
+
+  // Step 2: park every surviving existing row at a unique negative position -- guarantees no
+  // collision with each other or with the final 0..N-1 range, same trick PATCH .../reorder
+  // already used, generalized here to also make room for simultaneous inserts (step 3).
+  await Promise.all(
+    keepEntries.map((entry, i) => tx.trackListSong.update({ where: { id: entry.id! }, data: { position: -(i + 1) } })),
+  );
+
+  // Step 3: create every new row (song or spacer) at a unique negative position continuing the
+  // same sequence, recording which created row corresponds to which index in `entries` so step 5
+  // can place it at its final position.
+  //
+  // Deviation from spec §2.5's literal step 3/4 split: the spec's step 4 only applies override
+  // patches to *kept* (already-persisted) song entries, but a newly-added row (id === null) can
+  // just as easily carry a non-empty `overrides` -- the buffer lets the user add a song and set
+  // an override on it in the same session, before ever clicking Done (spec §1.4's addSong +
+  // patchOverrides are both plain local mutations, nothing stops them being called on the same
+  // clientKey back to back). Verified this is reachable, not hypothetical: a manual PUT with a
+  // new song entry carrying `overrides` silently dropped the override under the spec's literal
+  // algorithm. Fixed by folding buildOverrideUpdate's columns straight into the create() call
+  // for new song rows, instead of a separate update pass restricted to keepEntries.
+  const createdIdByEntryIndex = new Map<number, string>();
+  let nextNegative = -(keepEntries.length + 1);
+  for (const entry of createEntries) {
+    const entryIndex = entries.indexOf(entry);
+    const row = await tx.trackListSong.create({
+      data:
+        entry.kind === "song"
+          ? {
+              eventId,
+              entryType: "song",
+              songGroupId: entry.songGroupId,
+              // Resolved by the caller's validation pass (§2.4 step 5) -- guaranteed present
+              // there for every new song entry.
+              songId: resolvedCurrentVersionId.get(entry.songGroupId)!,
+              position: nextNegative,
+              ...(entry.overrides && Object.keys(entry.overrides).length > 0 ? buildOverrideUpdate(entry.overrides) : {}),
+            }
+          : {
+              eventId,
+              entryType: "spacer",
+              songGroupId: null,
+              songId: null,
+              position: nextNegative,
+            },
+    });
+    createdIdByEntryIndex.set(entryIndex, row.id);
+    nextNegative -= 1;
+  }
+
+  // Step 4: apply override patches to kept (already-persisted) song entries that supplied a
+  // non-empty `overrides` -- new rows' overrides are already folded into their create() above.
+  // No ordering constraint relative to steps 2/3/5 (never touches `position`), but sequenced
+  // here (not Promise.all'd with them) for readability, per spec §2.5.
+  for (const entry of keepEntries) {
+    if (entry.kind === "song" && entry.overrides && Object.keys(entry.overrides).length > 0) {
+      await tx.trackListSong.update({ where: { id: entry.id! }, data: buildOverrideUpdate(entry.overrides) });
+    }
+  }
+
+  // Step 5: final pass to real positions. Every row involved (kept or newly created) currently
+  // sits at a distinct negative position, and every target position (0..entries.length-1) is a
+  // distinct non-negative integer, so this cannot collide regardless of write order.
+  await Promise.all(
+    entries.map((entry, index) => {
+      const rowId = entry.id ?? createdIdByEntryIndex.get(index)!;
+      return tx.trackListSong.update({ where: { id: rowId }, data: { position: index } });
+    }),
+  );
+};

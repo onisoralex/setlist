@@ -32,7 +32,10 @@ export const GET = async (request: NextRequest) => {
         : {}),
     },
     // Most recent event first (spec change per user feedback) -- was "asc".
-    orderBy: { date: "desc" },
+    // Tiebreak on createdAt: same-day events tie on date alone, and Postgres
+    // doesn't guarantee tie order matches insertion order -- without this,
+    // an earlier-created same-day event could outrank a later one.
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
 
   return NextResponse.json(events);

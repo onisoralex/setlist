@@ -112,13 +112,25 @@ const EventPage = ({ params }: EventPageProps) => {
   if (error) return <p className={styles.error}>{error}</p>;
   if (!event || !settings) return <p>Loading...</p>;
 
+  // Mirrors the batch commit endpoint's own 409 check (spec tracklist-batch-save §2.6 Option
+  // B) -- a played or manually-locked event's tracklist can no longer be edited. Disabling the
+  // entry point here surfaces that before the user invests time editing, rather than only via
+  // a failed commit.
+  const tracklistLocked = event.status === "played" || event.lockedAt !== null;
+
   return (
     <div className={styles.page}>
       <div className={styles.controls}>
         <Button variant="contained" color="secondary" onClick={() => setEditingEvent(true)}>
           Edit Event
         </Button>
-        <Button variant="contained" color="secondary" onClick={() => setEditingTracklist(true)}>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => setEditingTracklist(true)}
+          disabled={tracklistLocked}
+          title={tracklistLocked ? "This event is played or locked -- unlock it to edit the tracklist" : undefined}
+        >
           Edit Tracklist
         </Button>
       </div>

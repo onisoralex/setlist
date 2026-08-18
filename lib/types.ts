@@ -2,6 +2,11 @@
 // types because API responses are hand-shaped in route handlers (e.g. resolved tracklist
 // rows, song-group summaries), not raw table rows.
 
+// lib/track-list.ts has no server-only imports (only Prisma-generated *types*, never the
+// `prisma` client singleton), so this type-only import is safe to pull into "use client"
+// components too -- see that file's OverridePatch doc comment.
+import type { OverridePatch } from "@/lib/track-list";
+
 export type EventStatus = "draft" | "scheduled" | "played";
 export type EventType = "sunday_morning" | "sunday_evening" | "other";
 
@@ -77,6 +82,27 @@ export type ResolvedTrackListEntry =
 
 export type EventDetail = EventSummary & {
   songs: ResolvedTrackListEntry[];
+};
+
+// Request shape for PUT /api/events/:id/tracklist (spec tracklist-batch-save §2.2) --
+// TracklistEditModal's full local edit buffer, submitted as one batch commit on Done/close
+// rather than one network call per edit action. `id: null` means "not yet persisted, create
+// it"; `overrides` omitted/empty means "no override changes for this entry this commit" (same
+// tri-state semantics as the old per-row overrides PATCH, just batched).
+export type TracklistBatchEntry =
+  | {
+      kind: "song";
+      id: string | null;
+      songGroupId: string;
+      overrides?: OverridePatch;
+    }
+  | {
+      kind: "spacer";
+      id: string | null;
+    };
+
+export type TracklistBatchRequest = {
+  entries: TracklistBatchEntry[];
 };
 
 export type Settings = {
