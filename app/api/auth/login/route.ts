@@ -44,7 +44,7 @@ export const POST = async (request: NextRequest) => {
   }
 
   // Direct comparison of the submitted password against the env var -- this is the one-time
-  // login check, not the recurring cookie check in middleware.ts (which uses isValidAuthToken).
+  // login check, not the recurring cookie check in proxy.ts (which uses isValidAuthToken).
   // The explicit "" check guards against a misconfigured/unset SITE_PASSWORD ("") letting a
   // blank submitted password through.
   const succeeded = password !== "" && password === process.env.SITE_PASSWORD;

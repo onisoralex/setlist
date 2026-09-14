@@ -71,6 +71,7 @@ const EventPage = ({ params }: EventPageProps) => {
           {event.name ?? EVENT_TYPE_LABELS[event.type]}
           {event.name ? ` (${EVENT_TYPE_LABELS[event.type]})` : ""} &middot;{" "}
           {EVENT_STATUS_LABELS[event.status]}
+          {/* Escaped codepoint, not a literal glyph, so the source file stays plain ASCII. */}
           {event.lockedAt ? " \u{1F512} locked" : ""}
         </span>
       </>

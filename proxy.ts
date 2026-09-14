@@ -5,7 +5,7 @@ import { isValidAuthToken } from "@/lib/auth";
 // auth this app has -- see CLAUDE.md.
 const AUTH_COOKIE_NAME = "setlist_auth";
 
-export const middleware = async (request: NextRequest) => {
+export const proxy = async (request: NextRequest) => {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const valid = token ? await isValidAuthToken(token, process.env.SITE_PASSWORD ?? "") : false;
 

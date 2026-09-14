@@ -52,6 +52,9 @@ export const POST = async (request: NextRequest) => {
     return badRequest(`type must be one of ${TYPE_VALUES.join(", ")}`);
   }
 
+  // "other" events have no built-in label, so a name is mandatory; the two recurring types
+  // already have a default label (EVENT_TYPE_LABELS elsewhere), so name is just an optional
+  // override for them.
   let name: string | null = null;
   if (body.type === "other") {
     if (typeof body.name !== "string" || body.name.trim() === "") {

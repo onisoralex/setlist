@@ -26,9 +26,13 @@ const theme = createTheme({
   // Pointing MUI's background.default at the same --page-background var, same string-literal
   // indirection as the --btn-* colors above, makes both rules resolve to one source of truth
   // instead of fixing this via specificity/!important.
+  // `defaultChannel: undefined` per MUI's own warning text: `background.default` is a var()
+  // reference, not a literal color, so MUI can't auto-derive an rgb "channel" string from it
+  // for alpha-blended derived colors. Setting it to undefined removes the channel token instead
+  // of hardcoding a resolved RGB value that would go stale whenever --page-background changes.
   colorSchemes: {
-    light: { palette: { background: { default: "var(--page-background)" } } },
-    dark: { palette: { background: { default: "var(--page-background)" } } },
+    light: { palette: { background: { default: "var(--page-background)", defaultChannel: undefined } } },
+    dark: { palette: { background: { default: "var(--page-background)", defaultChannel: undefined } } },
   },
   components: {
     MuiButton: {

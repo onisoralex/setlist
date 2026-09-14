@@ -8,9 +8,10 @@
 // expiry (see app/api/auth/login/route.ts).
 //
 // Uses the Web Crypto API (`crypto.subtle`) rather than `node:crypto` because this runs from
-// middleware.ts, which may execute on the Edge runtime -- `crypto.subtle` is the one crypto
-// API that's guaranteed available in both Edge and Node. Same reasoning for avoiding `Buffer`
-// below in favor of a manual hex conversion.
+// proxy.ts, which historically ran on the Edge runtime (Next's Proxy convention now defaults
+// to Node.js, but `crypto.subtle` is available as a Node global too, so this still works
+// unchanged either way) -- `crypto.subtle` is the one crypto API guaranteed available in both.
+// Same reasoning for avoiding `Buffer` below in favor of a manual hex conversion.
 
 const AUTH_TOKEN_MESSAGE = "setlist-auth";
 
