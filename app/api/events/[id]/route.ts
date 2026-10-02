@@ -11,7 +11,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 // GET /api/events/:id -- event detail with its ordered, override-resolved tracklist. The
 // frontend receives plain display fields, never raw override_* columns (spec §2) -- all
-// resolution happens here via lib/track-list.ts, not in the client.
+// resolution happens here via lib/track-list.ts, not in the client. Song rows additionally
+// carry `overriddenFields`/`inherited` for the tracklist editor (see resolveTrackListEntry).
 export const GET = async (_request: NextRequest, { params }: RouteParams) => {
   const { id } = await params;
 

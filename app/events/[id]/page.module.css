@@ -80,6 +80,7 @@
 /* Renders directly under .songRow now (always visible, not just inside .sheetPanel), so it
    needs its own horizontal padding to line up with the row's title/meta text above it. */
 .notes {
+  white-space: pre-wrap;
   padding: 0 var(--space-sm) var(--space-md);
   color: var(--color-foreground-muted);
   font-style: italic;

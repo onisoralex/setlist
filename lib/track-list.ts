@@ -10,7 +10,20 @@ type SongWithGroup = Song & { songGroup: SongGroup };
 // The six fields that can be overridden per-event (spec 00-foundation.md §3.3). Kept as a
 // tuple of keys rather than duplicated per-field code so resolveTrackListEntry and any future
 // caller (e.g. the overrides PATCH handler) share one source of truth for "which fields".
-const OVERRIDABLE_FIELDS = ["title", "key", "transpose", "instrument", "notes", "sheet"] as const;
+// Exported for TracklistEditModal too -- importing a runtime value from here into a "use client"
+// component is safe for the same reason the type imports are (no server-only imports, see
+// lib/types.ts's header).
+export const OVERRIDABLE_FIELDS = ["title", "key", "transpose", "instrument", "notes", "sheet"] as const;
+export type OverridableField = (typeof OVERRIDABLE_FIELDS)[number];
+
+const OVERRIDE_COLUMN_BY_FIELD = {
+  title: "overrideTitle",
+  key: "overrideKey",
+  transpose: "overrideTranspose",
+  instrument: "overrideInstrument",
+  notes: "overrideNotes",
+  sheet: "overrideSheet",
+} as const;
 
 // Spacers are independent, reorderable "blank line" entries (spec §1) -- not an attribute on a
 // song row -- so a resolved entry is a discriminated union on entryType rather than a single
@@ -30,6 +43,13 @@ export type ResolvedTrackListEntry =
       instrument: string;
       notes: string | null;
       sheet: string | null;
+      // Fields whose override_<field> column is non-null (an empty string counts -- see the
+      // schema comment on track_list_song), in OVERRIDABLE_FIELDS order.
+      overriddenFields: OverridableField[];
+      // The row's pinned song version's own values (`songId`, not the group's latest), i.e.
+      // what each field would show with no override -- lets the tracklist editor display the
+      // value a pending "clear override" falls back to without a second lookup.
+      inherited: Record<OverridableField, string | null>;
     }
   | {
       id: string;
@@ -40,9 +60,16 @@ export type ResolvedTrackListEntry =
 /**
  * Override resolution (spec 00-foundation.md §3.3): for each overridable field, the value the
  * frontend should display is `override_<field> ?? song.<field>`. This is intentionally the
- * only place that logic lives -- GET /api/events/:id calls this rather than resolving inline,
- * so the frontend never has to know overrides exist at all. Spacer rows have no song to resolve
- * against (song will be null per the optional Prisma relation) and are returned as-is.
+ * only place that logic lives -- GET /api/events/:id calls this rather than resolving inline.
+ *
+ * Originally the frontend was meant to never know overrides exist at all. That was deliberately
+ * revised for the tracklist editor, which needs to show which fields of a row are overridden
+ * (including ones saved in an earlier session) and what a cleared field falls back to -- hence
+ * the additive `overriddenFields` and `inherited`. The resolved display fields are unchanged, so
+ * read-only consumers (e.g. app/events/[id]/page.tsx) can keep ignoring overrides entirely.
+ *
+ * Spacer rows have no song to resolve against (song will be null per the optional Prisma
+ * relation) and are returned as-is.
  */
 export const resolveTrackListEntry = (
   row: TrackListSong,
@@ -51,6 +78,15 @@ export const resolveTrackListEntry = (
   if (row.entryType === "spacer") {
     return { id: row.id, position: row.position, entryType: "spacer" };
   }
+
+  const inherited: Record<OverridableField, string | null> = {
+    title: song!.songGroup.title,
+    key: song!.key,
+    transpose: song!.transpose,
+    instrument: song!.instrument,
+    notes: song!.notes,
+    sheet: song!.sheet,
+  };
 
   return {
     id: row.id,
@@ -69,6 +105,8 @@ export const resolveTrackListEntry = (
     instrument: row.overrideInstrument ?? song!.instrument,
     notes: row.overrideNotes ?? song!.notes,
     sheet: row.overrideSheet ?? song!.sheet,
+    overriddenFields: OVERRIDABLE_FIELDS.filter((field) => row[OVERRIDE_COLUMN_BY_FIELD[field]] !== null),
+    inherited,
   };
 };
 
@@ -77,16 +115,7 @@ export const resolveTrackListEntry = (
 // (including "") means "set it". `Partial<...>` alone can't express "present but null" vs
 // "absent" once the value round-trips through JSON.parse, so route handlers must check
 // `field in body`, not `body.field !== undefined` -- see app/api/events/[id]/songs/[trackListSongId]/overrides/route.ts.
-export type OverridePatch = Partial<Record<(typeof OVERRIDABLE_FIELDS)[number], string | null>>;
-
-const OVERRIDE_COLUMN_BY_FIELD = {
-  title: "overrideTitle",
-  key: "overrideKey",
-  transpose: "overrideTranspose",
-  instrument: "overrideInstrument",
-  notes: "overrideNotes",
-  sheet: "overrideSheet",
-} as const;
+export type OverridePatch = Partial<Record<OverridableField, string | null>>;
 
 /**
  * Translates a raw JSON request body into a Prisma update payload for track_list_song,

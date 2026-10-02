@@ -5,7 +5,7 @@
 // lib/track-list.ts has no server-only imports (only Prisma-generated *types*, never the
 // `prisma` client singleton), so this type-only import is safe to pull into "use client"
 // components too -- see that file's OverridePatch doc comment.
-import type { OverridePatch } from "@/lib/track-list";
+import type { OverridePatch, ResolvedTrackListEntry } from "@/lib/track-list";
 
 export type EventStatus = "draft" | "scheduled" | "played";
 export type EventType = "sunday_morning" | "sunday_evening" | "other";
@@ -56,29 +56,11 @@ export type EventSummary = {
   archived: boolean;
 };
 
-// Mirrors lib/track-list.ts's ResolvedTrackListEntry -- spacers are independent, reorderable
-// "blank line" entries (spec §1), not an attribute on a song row, hence the discriminated union.
-export type ResolvedTrackListEntry =
-  | {
-      id: string;
-      position: number;
-      entryType: "song";
-      songGroupId: string;
-      songId: string;
-      title: string;
-      titleDe: string | null;
-      titleEn: string | null;
-      key: string;
-      transpose: string;
-      instrument: string;
-      notes: string | null;
-      sheet: string | null;
-    }
-  | {
-      id: string;
-      position: number;
-      entryType: "spacer";
-    };
+// Re-exported rather than mirrored: this used to be a hand-maintained copy of lib/track-list.ts's
+// ResolvedTrackListEntry, which silently drifts whenever the server shape gains a field (as it
+// did with overriddenFields/inherited). Type-only, so safe in "use client" components for the
+// same reason as the track-list import above.
+export type { ResolvedTrackListEntry };
 
 export type EventDetail = EventSummary & {
   songs: ResolvedTrackListEntry[];

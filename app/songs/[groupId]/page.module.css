@@ -17,6 +17,7 @@
 }
 
 .notes {
+  white-space: pre-wrap;
   color: var(--color-foreground-muted);
   font-style: italic;
 }

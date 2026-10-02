@@ -15,11 +15,9 @@ import { apiFetch } from "@/lib/api-client";
 import { formatGermanDate } from "@/lib/date-format";
 import { formatSongDisplayName } from "@/lib/song-display-name";
 import { matchesSearch, scopesFromSettings, type SearchScopes } from "@/lib/song-search";
-import type { OverridePatch } from "@/lib/track-list";
+import { OVERRIDABLE_FIELDS, type OverridableField, type OverridePatch } from "@/lib/track-list";
 import type { EventDetail, EventType, Settings, SongDetail, SongSummary, TracklistBatchEntry } from "@/lib/types";
 import styles from "./TracklistEditModal.module.css";
-
-const EMPTY_OVERRIDES = { title: "", key: "", transpose: "", instrument: "", notes: "", sheet: "" };
 
 // Only these two overridable fields hold free-text/long-form content -- the rest (title, key,
 // transpose, instrument) are short values that fit a single line, so only notes/sheet get a
@@ -27,12 +25,7 @@ const EMPTY_OVERRIDES = { title: "", key: "", transpose: "", instrument: "", not
 // SongForm's minRows={12} for the same field).
 const MULTILINE_FIELDS = { notes: 3, sheet: 12 } as const;
 
-// Which of the six overridable fields currently have a non-null override set on a row --
-// drives whether the "clear" action is offered per field (spec §6: clearing must be a
-// distinct action from saving an empty value).
-type OverrideFlags = Record<keyof typeof EMPTY_OVERRIDES, boolean>;
-
-const OVERRIDABLE_FIELDS = ["title", "key", "transpose", "instrument", "notes", "sheet"] as const;
+type OverrideValues = Record<OverridableField, string>;
 
 // Duplicated from app/events/[id]/page.tsx and app/events/page.tsx rather than shared --
 // consistent with how those two files already each carry their own copy.
@@ -65,6 +58,14 @@ type TracklistBufferEntry =
         notes: string | null;
         sheet: string | null;
       };
+      // Fields with an override already persisted when this entry was seeded (from
+      // GET /api/events/:id's `overriddenFields`; always [] for rows added this session). Never
+      // mutated locally -- pending changes live in `overrides`, see isFieldOverridden.
+      overriddenFields: OverridableField[];
+      // What each field shows with no override: the row's pinned song version's values (the
+      // API's `inherited`), or for rows added this session the summary they were added with.
+      // The fallback for a pending clear, see resolveBufferSongDisplay.
+      inherited: Record<OverridableField, string | null>;
       // Tri-state patch accumulated locally since this entry was created -- same wire semantics
       // as the old PATCH .../overrides body (key absent = untouched, null = clear, string = set).
       overrides: OverridePatch;
@@ -94,22 +95,30 @@ const seedBuffer = (eventDetail: EventDetail): TracklistBuffer =>
             notes: entry.notes,
             sheet: entry.sheet,
           },
+          overriddenFields: entry.overriddenFields,
+          inherited: entry.inherited,
           overrides: {},
         },
   );
 
+type SongBufferEntry = Extract<TracklistBufferEntry, { kind: "song" }>;
+
+// Whether `field` will be overridden once the buffer is committed: a pending local set or clear
+// (field present in `overrides`) wins over what was persisted when the buffer was seeded.
+const isFieldOverridden = (entry: SongBufferEntry, field: OverridableField): boolean =>
+  field in entry.overrides ? entry.overrides[field] !== null : entry.overriddenFields.includes(field);
+
 // Pure, read-only display resolution -- mirrors resolveTrackListEntry's `override ?? song value`
-// logic server-side, just computed client-side against the locally-held SongSummary instead of
-// a DB round-trip. Used for the row summary line and as each OverrideEditor field's placeholder.
-const resolveBufferSongDisplay = (
-  entry: Extract<TracklistBufferEntry, { kind: "song" }>,
-  songSummaryByGroupId: Map<string, SongSummary>,
-): Record<(typeof OVERRIDABLE_FIELDS)[number], string | null> => {
-  const song = songSummaryByGroupId.get(entry.songGroupId);
-  const result = {} as Record<(typeof OVERRIDABLE_FIELDS)[number], string | null>;
+// logic server-side, applied to the buffer's pending patch: untouched fields keep their
+// server-resolved value, a pending set shows the new value, and a pending clear falls back to
+// `inherited` (the row's pinned song version, not the group's latest -- the two differ once the
+// song gains a newer version after being added to this event). Used for the row summary line
+// and as each OverrideEditor field's prefilled initial value.
+const resolveBufferSongDisplay = (entry: SongBufferEntry): Record<OverridableField, string | null> => {
+  const result = {} as Record<OverridableField, string | null>;
   for (const field of OVERRIDABLE_FIELDS) {
     if (field in entry.overrides) {
-      result[field] = entry.overrides[field] ?? song?.[field] ?? null;
+      result[field] = entry.overrides[field] ?? entry.inherited[field];
     } else {
       result[field] = entry.baseResolved[field];
     }
@@ -151,6 +160,18 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
   // its onCreated needs to call addSong, which owns the buffer mutation.
   const [newSongQuery, setNewSongQuery] = useState<string | null>(null);
 
+  // The component stays mounted while the Dialog is closed, so overrideTarget would otherwise
+  // survive a close/reopen and the previously open panel would reappear. Resetting it unmounts
+  // OverrideEditor, which silently drops any unsaved drafts. Done during render on the
+  // closed->open transition (React's "adjusting state when a prop changes" pattern) rather than
+  // in the open effect below: react-hooks/set-state-in-effect forbids the latter, and this way
+  // the stale panel never paints for even one frame.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setOverrideTarget(null);
+  }
+
   // useCallback (rather than a plain function, unlike the page this replaced) so its identity
   // only changes when eventId does -- satisfies react-hooks/exhaustive-deps below without
   // re-fetching on every unrelated re-render (e.g. typing in an override field).
@@ -158,10 +179,10 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
     Promise.all([
       apiFetch<EventDetail>(`/api/events/${eventId}`),
       // includeArchived=true (not the default excluded-archived list): the combobox's
-      // availableSongs still filters archived out below, but resolveBufferSongDisplay's
-      // "clear override" fallback needs to resolve even a group archived after it was added
-      // to this tracklist -- archiving never touches existing track_list_song rows, so that's
-      // a real, reachable case, not hypothetical.
+      // availableSongs still filters archived out below, but each row's titleDe/titleEn lookup
+      // needs to resolve even a group archived after it was added to this tracklist --
+      // archiving never touches existing track_list_song rows, so that's a real, reachable
+      // case, not hypothetical.
       apiFetch<SongSummary[]>("/api/songs?includeArchived=true"),
     ])
       .then(([eventResult, songsResult]) => {
@@ -190,7 +211,16 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
   ) =>
     setBuffer((prev) => [
       ...prev,
-      { kind: "song", id: null, clientKey: genTempId(), songGroupId, baseResolved: summary, overrides: {} },
+      {
+        kind: "song",
+        id: null,
+        clientKey: genTempId(),
+        songGroupId,
+        baseResolved: summary,
+        overriddenFields: [],
+        inherited: summary,
+        overrides: {},
+      },
     ]);
 
   const addSpacer = () => setBuffer((prev) => [...prev, { kind: "spacer", id: null, clientKey: genTempId() }]);
@@ -323,9 +353,9 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
                   );
                 }
 
-                const display = resolveBufferSongDisplay(entry, songSummaryByGroupId);
+                const display = resolveBufferSongDisplay(entry);
                 const song = songSummaryByGroupId.get(entry.songGroupId);
-                const hasOverrides = Object.keys(entry.overrides).length > 0;
+                const hasOverrides = OVERRIDABLE_FIELDS.some((field) => isFieldOverridden(entry, field));
 
                 return (
                   <li key={entry.clientKey} className={styles.row}>
@@ -380,7 +410,6 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
                     {overrideTarget === entry.clientKey && (
                       <OverrideEditor
                         entry={entry}
-                        songSummaryByGroupId={songSummaryByGroupId}
                         onPatch={(patch) => patchOverrides(entry.clientKey, patch)}
                         onClose={() => setOverrideTarget(null)}
                       />
@@ -467,8 +496,7 @@ const SongSearchCombobox = ({ availableSongs, scopes, onAdd, onCreateNew }: Song
 };
 
 type OverrideEditorProps = {
-  entry: Extract<TracklistBufferEntry, { kind: "song" }>;
-  songSummaryByGroupId: Map<string, SongSummary>;
+  entry: SongBufferEntry;
   onPatch: (patch: OverridePatch) => void;
   onClose: () => void;
 };
@@ -478,89 +506,88 @@ type OverrideEditorProps = {
 // "clear" -- an empty string is itself a valid override value, so the two must stay distinct
 // affordances in the UI, not just distinct wire values. Mutates the buffer locally via
 // onPatch -- no network call, no error state to show, since a local mutation can't fail.
-const OverrideEditor = ({ entry, songSummaryByGroupId, onPatch, onClose }: OverrideEditorProps) => {
-  const [values, setValues] = useState({ ...EMPTY_OVERRIDES });
-  const [touched, setTouched] = useState<OverrideFlags>({
-    title: false,
-    key: false,
-    transpose: false,
-    instrument: false,
-    notes: false,
-    sheet: false,
+//
+// Fields are prefilled with the currently resolved value (rather than shown as a placeholder)
+// so it can be edited in place, and a field only lands in the patch if its value differs from
+// what it was prefilled with. Prefilling hides whether a value is inherited or event-specific,
+// hence the explicit "Overridden for this event" helper text.
+const OverrideEditor = ({ entry, onPatch, onClose }: OverrideEditorProps) => {
+  const [initialValues, setInitialValues] = useState(() => {
+    const resolved = resolveBufferSongDisplay(entry);
+    return Object.fromEntries(OVERRIDABLE_FIELDS.map((field) => [field, resolved[field] ?? ""])) as OverrideValues;
   });
+  const [values, setValues] = useState(initialValues);
 
-  const current = resolveBufferSongDisplay(entry, songSummaryByGroupId);
+  const handleChange = (field: OverridableField, value: string) => setValues((prev) => ({ ...prev, [field]: value }));
 
-  const handleChange = (field: keyof typeof EMPTY_OVERRIDES, value: string) => {
-    setValues((prev) => ({ ...prev, [field]: value }));
-    setTouched((prev) => ({ ...prev, [field]: true }));
-  };
-
-  // Left open rather than auto-closing (today's network-era behavior) -- there's no round-trip
+  // Left open rather than auto-closing (the network-era behavior) -- there's no round-trip
   // left to justify auto-closing, and staying open lets the user clear/re-check other fields.
-  // Also discards any locally-typed (not-yet-saved) draft for this field, so its input reflects
-  // the freshly-reverted placeholder instead of a stale draft that would otherwise mask it.
-  const handleClear = (field: keyof typeof EMPTY_OVERRIDES) => {
+  // Resets both the draft and its baseline to the row's inherited (pinned song version) value,
+  // so the input shows what the field will inherit from now on and isn't counted as a pending
+  // change on Save.
+  const handleClear = (field: OverridableField) => {
     onPatch({ [field]: null });
-    setValues((prev) => ({ ...prev, [field]: "" }));
-    setTouched((prev) => ({ ...prev, [field]: false }));
+    const inherited = entry.inherited[field] ?? "";
+    setValues((prev) => ({ ...prev, [field]: inherited }));
+    setInitialValues((prev) => ({ ...prev, [field]: inherited }));
   };
 
   const handleSave = (submitEvent: React.FormEvent) => {
     submitEvent.preventDefault();
-    // Only send fields the user actually touched -- an untouched field must stay absent from
-    // the patch so the tri-state merge leaves its existing override alone (spec §6).
+    // Only send fields whose value changed -- an unchanged field must stay absent from the
+    // patch so the tri-state merge leaves its existing override alone (spec §6).
     const patch: OverridePatch = {};
-    for (const [field, isTouched] of Object.entries(touched)) {
-      if (isTouched) patch[field as keyof typeof EMPTY_OVERRIDES] = values[field as keyof typeof EMPTY_OVERRIDES];
+    for (const field of OVERRIDABLE_FIELDS) {
+      if (values[field] !== initialValues[field]) patch[field] = values[field];
     }
-    if (Object.keys(patch).length === 0) return;
-    onPatch(patch);
+    if (Object.keys(patch).length > 0) onPatch(patch);
     onClose();
   };
 
   return (
     <form className={styles.overrideForm} onSubmit={handleSave}>
       <p className={styles.overrideHint}>
-        Overrides apply to this event only. Leave a field untouched to keep inheriting from the song.
+        Overrides apply to this event only. Leave a field unchanged to keep inheriting from the song.
       </p>
-      {(Object.keys(EMPTY_OVERRIDES) as (keyof typeof EMPTY_OVERRIDES)[]).map((field) => {
-        const multilineRows = (MULTILINE_FIELDS as Partial<Record<keyof typeof EMPTY_OVERRIDES, number>>)[field];
+      {OVERRIDABLE_FIELDS.map((field) => {
+        const multilineRows = (MULTILINE_FIELDS as Partial<Record<OverridableField, number>>)[field];
+        const overridden = isFieldOverridden(entry, field);
         return (
-          <div
-            key={field}
-            className={multilineRows ? `${styles.overrideField} ${styles.overrideFieldMultiline}` : styles.overrideField}
-          >
-            {multilineRows ? (
-              <TextField
-                label={field.charAt(0).toUpperCase() + field.slice(1)}
-                value={values[field]}
-                onChange={(e) => handleChange(field, e.target.value)}
-                placeholder={current[field] ?? ""}
-                size="small"
-                multiline
-                minRows={multilineRows}
-                fullWidth
-              />
-            ) : (
-              <TextField
-                label={field.charAt(0).toUpperCase() + field.slice(1)}
-                value={values[field]}
-                onChange={(e) => handleChange(field, e.target.value)}
-                placeholder={current[field] ?? ""}
-                size="small"
-                fullWidth
-              />
-            )}
-            <Button type="button" variant="contained" color="secondary" size="small" onClick={() => handleClear(field)}>
+          <div key={field} className={styles.overrideField}>
+            <TextField
+              label={`${field.charAt(0).toUpperCase()}${field.slice(1)}`}
+              value={values[field]}
+              onChange={(e) => handleChange(field, e.target.value)}
+              helperText={overridden ? "Overridden for this event" : undefined}
+              // Always shrunk so the label sits in the outline notch, never inside an empty field.
+              slotProps={{ inputLabel: { shrink: true } }}
+              size="small"
+              multiline={multilineRows !== undefined}
+              minRows={multilineRows}
+              fullWidth
+            />
+            <Button
+              type="button"
+              variant="contained"
+              color="secondary"
+              size="small"
+              onClick={() => handleClear(field)}
+              disabled={!overridden}
+            >
               Clear
             </Button>
           </div>
         );
       })}
-      <Button type="submit" variant="contained" color="primary">
-        Save Overrides
-      </Button>
+      <div className={styles.overrideActions}>
+        <Button type="submit" variant="contained" color="primary">
+          Save Overrides
+        </Button>
+        {/* Unmounting the editor is all "discard" needs -- drafts only live in its local state. */}
+        <Button type="button" variant="contained" color="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
     </form>
   );
 };

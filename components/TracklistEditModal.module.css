@@ -109,7 +109,10 @@
 
 .overrideField {
   display: flex;
-  align-items: flex-end;
+  /* flex-start for every field: the "Clear" button pins to the top of the input. With
+     flex-end it would line up with the bottom of the "Overridden for this event" helper text,
+     or with the bottom edge of a tall notes/sheet textarea. */
+  align-items: flex-start;
   gap: var(--space-sm);
   flex-wrap: wrap;
 }
@@ -118,9 +121,7 @@
   flex: 1;
 }
 
-/* Multiline fields (notes/sheet) grow several rows tall -- flex-end (the default above) would
-   center the short "Clear" button against the bottom of a tall textarea, which looks odd, so
-   pin it to the top of the field instead. */
-.overrideFieldMultiline {
-  align-items: flex-start;
+.overrideActions {
+  display: flex;
+  gap: var(--space-sm);
 }
