@@ -6,6 +6,7 @@ import Button from "@mui/material/Button";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import ChangeTitleModal from "@/components/ChangeTitleModal";
+import EditIconButton from "@/components/EditIconButton";
 import EditSongModal from "@/components/EditSongModal";
 import NewSongModal from "@/components/NewSongModal";
 import SearchScopeChips from "@/components/SearchScopeChips";
@@ -149,9 +150,7 @@ const SongListPage = () => {
               </span>
             </Link>
             <div className={styles.rowActions}>
-              <Button type="button" variant="contained" color="secondary" size="small" onClick={() => setEditTarget(song.id)}>
-                Edit
-              </Button>
+              <EditIconButton onClick={() => setEditTarget(song.id)} />
               <Button type="button" variant="contained" color="secondary" size="small" onClick={() => setRenameTarget(song)}>
                 Rename
               </Button>

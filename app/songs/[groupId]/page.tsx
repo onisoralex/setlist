@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Button from "@mui/material/Button";
+import EditIconButton from "@/components/EditIconButton";
 import EditSongModal from "@/components/EditSongModal";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDateTime } from "@/lib/date-format";
@@ -47,9 +47,7 @@ const SongDetailPage = ({ params }: SongDetailPageProps) => {
         <p className={styles.meta}>
           {song.key} ({song.transpose}) &middot; {song.instrument}
         </p>
-        <Button type="button" variant="contained" color="secondary" size="small" onClick={() => setEditOpen(true)}>
-          Edit
-        </Button>
+        <EditIconButton onClick={() => setEditOpen(true)} />
       </div>
 
       {song.notes && <p className={styles.notes}>{song.notes}</p>}

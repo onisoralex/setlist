@@ -19,8 +19,8 @@ type EditSongModalProps = {
 
 // Wraps SongForm in a Dialog for editing an existing song, mirroring components/NewSongModal.tsx.
 // Unlike NewSongModal it needs the current song's full detail before it can render the form --
-// every caller (the song list row, this route's own page.tsx for direct/bookmarked links) only
-// ever has a SongSummary, not the titleDe/titleEn/notes/sheet fields this form needs -- so it
+// every caller (the song list row, the song detail page, the tracklist editor's row pencil) only
+// ever has a SongSummary or a tracklist row, not the titleDe/titleEn/notes/sheet fields this form needs -- so it
 // fetches GET /api/songs/:groupId itself whenever opened for a given groupId. Saving always
 // PATCHes, which creates a new version (spec §3.1) -- same as the page this replaced, there is
 // no "just this event" edit path here; that only exists from the tracklist editor's override

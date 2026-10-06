@@ -9,6 +9,8 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
+import EditIconButton from "@/components/EditIconButton";
+import EditSongModal from "@/components/EditSongModal";
 import NewSongModal from "@/components/NewSongModal";
 import SearchScopeChips from "@/components/SearchScopeChips";
 import { apiFetch } from "@/lib/api-client";
@@ -103,6 +105,19 @@ const seedBuffer = (eventDetail: EventDetail): TracklistBuffer =>
 
 type SongBufferEntry = Extract<TracklistBufferEntry, { kind: "song" }>;
 
+// A row added this session has no pinned version or persisted overrides yet, so both its
+// baseResolved and its inherited values are simply the song summary it was added with. Shared
+// by addSong and the post-song-edit refresh (handleSongSaved), which rebuilds unsaved rows from
+// the refetched summary.
+const valuesFromSummary = (summary: SongSummary | SongDetail): SongBufferEntry["baseResolved"] => ({
+  title: summary.title,
+  key: summary.key,
+  transpose: summary.transpose,
+  instrument: summary.instrument,
+  notes: summary.notes,
+  sheet: summary.sheet,
+});
+
 // Whether `field` will be overridden once the buffer is committed: a pending local set or clear
 // (field present in `overrides`) wins over what was persisted when the buffer was seeded.
 const isFieldOverridden = (entry: SongBufferEntry, field: OverridableField): boolean =>
@@ -145,8 +160,9 @@ type TracklistEditModalProps = {
 // Every edit (add/remove/reorder/override) mutates `buffer` locally only (spec tracklist-
 // batch-save §1) -- `load()` seeds it once on open and is never called again by an action
 // handler. Done and Dialog's own onClose both commit the whole buffer in one PUT request
-// (§5); NewSongModal's own song-creation POST is the one exception that still hits the network
-// immediately (§3), since creating global master data is unrelated to this event's tracklist.
+// (§5). The two exceptions that still hit the network immediately both touch global master
+// data, not this event's tracklist: NewSongModal's song-creation POST (§3) and EditSongModal's
+// song PATCH (row pencil), after which handleSongSaved patches the buffer in place.
 const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) => {
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [allSongs, setAllSongs] = useState<SongSummary[] | null>(null);
@@ -159,6 +175,10 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
   // holds the query text as the modal's initialTitle. Lives here (not in the combobox) since
   // its onCreated needs to call addSong, which owns the buffer mutation.
   const [newSongQuery, setNewSongQuery] = useState<string | null>(null);
+  // Non-null while EditSongModal is open over this one for that song group (the row pencil).
+  // Unlike the other row actions this one hits the network immediately -- it edits the global
+  // song, not this event's tracklist -- see handleSongSaved for how the buffer catches up.
+  const [editSongGroupId, setEditSongGroupId] = useState<string | null>(null);
 
   // The component stays mounted while the Dialog is closed, so overrideTarget would otherwise
   // survive a close/reopen and the previously open panel would reappear. Resetting it unmounts
@@ -205,23 +225,22 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
       .catch((err) => setError(err.message));
   }, [open]);
 
-  const addSong = (
-    songGroupId: string,
-    summary: { title: string; key: string; transpose: string; instrument: string; notes: string | null; sheet: string | null },
-  ) =>
+  const addSong = (summary: SongSummary | SongDetail) => {
+    const values = valuesFromSummary(summary);
     setBuffer((prev) => [
       ...prev,
       {
         kind: "song",
         id: null,
         clientKey: genTempId(),
-        songGroupId,
-        baseResolved: summary,
+        songGroupId: summary.id,
+        baseResolved: values,
         overriddenFields: [],
-        inherited: summary,
+        inherited: values,
         overrides: {},
       },
     ]);
+  };
 
   const addSpacer = () => setBuffer((prev) => [...prev, { kind: "spacer", id: null, clientKey: genTempId() }]);
 
@@ -240,6 +259,68 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
     setBuffer((prev) =>
       prev.map((e) => (e.kind === "song" && e.clientKey === clientKey ? { ...e, overrides: { ...e.overrides, ...patch } } : e)),
     );
+
+  // Opening the song editor drops any open override panel: its prefilled initial values would be
+  // stale once the song is saved, and discarding its unsaved drafts matches what closing this
+  // whole modal already does.
+  const openSongEditor = (songGroupId: string) => {
+    setOverrideTarget(null);
+    setEditSongGroupId(songGroupId);
+  };
+
+  // The PATCH behind EditSongModal creates a new song version and re-points this event's
+  // track_list_song rows to it (lib/song-versioning.ts -- this modal only opens for draft/
+  // scheduled, unlocked events, exactly the ones that get re-pointed). Deliberately NOT load():
+  // that reseeds `buffer` and would wipe every uncommitted reorder/add/remove/override. Instead
+  // only the edited group's song entries are patched in place:
+  // - persisted rows take baseResolved/inherited/overriddenFields from the refetched row (by id),
+  //   so stored overrides keep winning over the new song values; their pending `overrides`,
+  //   position and clientKey are untouched.
+  // - rows added this session (id null) are rebuilt from the refetched song summary.
+  // A persisted row the user removed is simply absent from the buffer; one missing from the
+  // refetched event (shouldn't happen) is left as is.
+  const handleSongSaved = async () => {
+    const songGroupId = editSongGroupId;
+    setEditSongGroupId(null);
+    if (songGroupId === null) return;
+    try {
+      const [eventResult, songsResult] = await Promise.all([
+        apiFetch<EventDetail>(`/api/events/${eventId}`),
+        apiFetch<SongSummary[]>("/api/songs?includeArchived=true"),
+      ]);
+      setEvent(eventResult);
+      setAllSongs(songsResult);
+      const refetchedById = new Map(eventResult.songs.map((row) => [row.id, row]));
+      const summary = songsResult.find((s) => s.id === songGroupId);
+      setBuffer((prev) =>
+        prev.map((entry) => {
+          if (entry.kind !== "song" || entry.songGroupId !== songGroupId) return entry;
+          if (entry.id === null) {
+            if (!summary) return entry;
+            const values = valuesFromSummary(summary);
+            return { ...entry, baseResolved: values, inherited: values };
+          }
+          const row = refetchedById.get(entry.id);
+          if (!row || row.entryType === "spacer") return entry;
+          return {
+            ...entry,
+            baseResolved: {
+              title: row.title,
+              key: row.key,
+              transpose: row.transpose,
+              instrument: row.instrument,
+              notes: row.notes,
+              sheet: row.sheet,
+            },
+            overriddenFields: row.overriddenFields,
+            inherited: row.inherited,
+          };
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to refresh after song edit");
+    }
+  };
 
   // Commits the whole buffer in one request (spec §5). Wired to both Done and Dialog's own
   // onClose (backdrop click / Escape), per the Mind's confirmed direction -- this modal has no
@@ -281,16 +362,7 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
               <SongSearchCombobox
                 availableSongs={availableSongs}
                 scopes={scopes}
-                onAdd={(song) =>
-                  addSong(song.id, {
-                    title: song.title,
-                    key: song.key,
-                    transpose: song.transpose,
-                    instrument: song.instrument,
-                    notes: song.notes,
-                    sheet: song.sheet,
-                  })
-                }
+                onAdd={addSong}
                 onCreateNew={setNewSongQuery}
               />
               <SearchScopeChips settings={settings} onChange={setSettings} />
@@ -304,16 +376,19 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
               initialTitle={newSongQuery ?? undefined}
               onCreated={(song: SongDetail) => {
                 setNewSongQuery(null);
-                addSong(song.id, {
-                  title: song.title,
-                  key: song.key,
-                  transpose: song.transpose,
-                  instrument: song.instrument,
-                  notes: song.notes,
-                  sheet: song.sheet,
-                });
+                addSong(song);
               }}
               onCancel={() => setNewSongQuery(null)}
+            />
+
+            {/* Layered over this Dialog, which stays open and mounted underneath. MUI's modal
+                manager routes backdrop clicks and Escape to the topmost modal only, so those
+                close just this one and never reach this Dialog's onClose (handleCommit). */}
+            <EditSongModal
+              open={editSongGroupId !== null}
+              groupId={editSongGroupId ?? ""}
+              onSaved={handleSongSaved}
+              onCancel={() => setEditSongGroupId(null)}
             />
 
             <ul className={styles.list}>
@@ -373,6 +448,7 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
                         </span>
                       </div>
                       <div className={styles.rowActions}>
+                        <EditIconButton onClick={() => openSongEditor(entry.songGroupId)} />
                         <Button
                           variant="contained"
                           color="secondary"
