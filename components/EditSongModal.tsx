@@ -6,6 +6,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import SongForm, { type SongFormValues } from "@/components/SongForm";
 import { apiFetch } from "@/lib/api-client";
+import { clearEventDetailCache } from "@/lib/event-detail-cache";
 import { formatSongDisplayName } from "@/lib/song-display-name";
 import type { SongDetail } from "@/lib/types";
 import styles from "./EditSongModal.module.css";
@@ -62,6 +63,11 @@ const EditSongModal = ({ open, groupId, onSaved, onCancel }: EditSongModalProps)
         sheet: values.sheet || null,
       }),
     });
+    // A song edit re-points every draft/scheduled unlocked event to the new version, so any
+    // cached event detail may now be stale (see clearEventDetailCache). Done here rather than
+    // in each onSaved so every host of this modal (songs list, song pages, tracklist modal)
+    // gets it.
+    clearEventDetailCache();
     onSaved();
   };
 

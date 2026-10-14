@@ -12,6 +12,7 @@ import NewSongModal from "@/components/NewSongModal";
 import SearchScopeChips from "@/components/SearchScopeChips";
 import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import { apiFetch } from "@/lib/api-client";
+import { clearEventDetailCache } from "@/lib/event-detail-cache";
 import { chromaticKeyRank } from "@/lib/musical-key-order";
 import { formatSongDisplayName } from "@/lib/song-display-name";
 import { matchesSearch, scopesFromSettings } from "@/lib/song-search";
@@ -85,6 +86,8 @@ const SongListPage = () => {
       method: "PATCH",
       body: JSON.stringify({ title: newTitle }),
     });
+    // Event details show song titles, so a rename makes cached events stale too.
+    clearEventDetailCache();
     setRenameTarget(null);
     loadSongs();
   };

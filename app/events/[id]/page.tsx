@@ -1,13 +1,19 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@mui/material/Button";
 import EditEventModal from "@/components/EditEventModal";
 import TracklistEditModal from "@/components/TracklistEditModal";
 import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import { apiFetch } from "@/lib/api-client";
-import { formatGermanDate } from "@/lib/date-format";
+import {
+  fetchAndCacheEvent,
+  getCachedEvent,
+  invalidateEvent,
+  type CachedEvent,
+} from "@/lib/event-detail-cache";
+import { formatGermanDate, formatGermanTimeOrDateTime } from "@/lib/date-format";
 import { applyOctaveUpSymbol } from "@/lib/notation";
 import { formatSongDisplayName } from "@/lib/song-display-name";
 import type { EventDetail, EventStatus, EventType, Settings } from "@/lib/types";
@@ -35,26 +41,87 @@ const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
 const EventPage = ({ params }: EventPageProps) => {
   const { id } = use(params);
   const router = useRouter();
-  const [event, setEvent] = useState<EventDetail | null>(null);
+  // Seeded from the client-side cache (warmed by the event list's prefetch) so a cache hit
+  // renders immediately; loadEvent below still revalidates on mount (stale-while-revalidate).
+  // Safe for hydration: the cache is only ever written from client-side effects/handlers, so
+  // it's empty during SSR and on the first client render after a full reload alike.
+  // Kept together with its fetched-at time so a failed revalidation can say how old the data
+  // on screen is.
+  const [loaded, setLoaded] = useState<CachedEvent | null>(() => getCachedEvent(id) ?? null);
+  const event: EventDetail | null = loaded?.event ?? null;
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Failure of the most recent event / settings load. Deliberately NOT one page-wide error that
+  // replaces everything: once any event data is on screen, a failed refresh keeps showing it
+  // with a "may be outdated" note (stale data beats no data at a music stand with bad Wi-Fi).
+  // Only an event load failure with nothing to show falls back to the full error.
+  const [eventError, setEventError] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [openSongId, setOpenSongId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState(false);
   const [editingTracklist, setEditingTracklist] = useState(false);
 
-  const load = () => {
-    Promise.all([
-      apiFetch<EventDetail>(`/api/events/${id}`),
-      apiFetch<Settings>("/api/settings"),
-    ])
-      .then(([eventResult, settingsResult]) => {
-        setEvent(eventResult);
-        setSettings(settingsResult);
-      })
-      .catch((err) => setError(err.message));
+  // Every event (re)fetch on this page goes through fetchAndCacheEvent, so returning to the
+  // list and reopening never shows older data than this page last saw. On mount this is the
+  // mandatory revalidation: it runs even when the state above was seeded from the cache.
+  // Loads can overlap (mount revalidation, Retry, refetch after a write), so only the newest
+  // one may touch state -- otherwise a slow older response could overwrite newer data, or a
+  // late older failure could raise the outdated note right after a newer load succeeded.
+  // Never rejects, so Retry can simply await it.
+  const latestLoad = useRef(0);
+  const loadEvent = useCallback((): Promise<void> => {
+    const loadNumber = ++latestLoad.current;
+    return fetchAndCacheEvent(id).then(
+      (entry) => {
+        if (loadNumber !== latestLoad.current) return;
+        setLoaded(entry);
+        setEventError(null);
+      },
+      (err: Error) => {
+        if (loadNumber !== latestLoad.current) return;
+        setEventError(err.message);
+      },
+    );
+  }, [id]);
+
+  useEffect(() => {
+    loadEvent();
+  }, [loadEvent]);
+
+  // After a local write: invalidate first so neither an older in-flight prefetch nor a failed
+  // refetch can leave pre-write data in the cache, then refetch. The current data stays on
+  // screen until the fresh data arrives -- and if the refetch fails it stays with the outdated
+  // note (whose fetched-at time predates the write), never silently passed off as fresh.
+  const reloadAfterWrite = () => {
+    invalidateEvent(id);
+    loadEvent();
   };
 
-  useEffect(load, [id]);
+  // Loaded separately from the event (was one Promise.all) so a cached event can render
+  // without waiting on settings. Settings only feed the chord sheet's octave-up symbol, which
+  // sits behind a tap-to-expand panel, and can't change from this page -- so it's fetched once
+  // rather than on every event refetch (Retry re-runs it only if it never succeeded).
+  // Never rejects, same as loadEvent.
+  const loadSettings = (): Promise<void> =>
+    apiFetch<Settings>("/api/settings").then(
+      (result) => {
+        setSettings(result);
+        setSettingsError(null);
+      },
+      (err: Error) => setSettingsError(err.message),
+    );
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  // Re-runs the failed loads in place. A page reload is not a recovery path: it would wipe the
+  // in-memory event cache and, while still offline, land on the full error instead.
+  const handleRetry = async () => {
+    setRetrying(true);
+    await Promise.all([loadEvent(), settings ? null : loadSettings()]);
+    setRetrying(false);
+  };
 
   // Composite date + type/status header content (spec: date at the nav brand's own size,
   // type/status/lock immediately after at the smaller .meta size, all on one line). Memoized
@@ -81,13 +148,13 @@ const EventPage = ({ params }: EventPageProps) => {
 
   const handleStatusChange = async (status: string) => {
     await apiFetch(`/api/events/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
-    load();
+    reloadAfterWrite();
   };
 
   const handleEditEvent = async (values: { date: string; type: EventType; name: string | null }) => {
     await apiFetch(`/api/events/${id}`, { method: "PATCH", body: JSON.stringify(values) });
     setEditingEvent(false);
-    load();
+    reloadAfterWrite();
   };
 
   const handleLockToggle = async () => {
@@ -96,7 +163,7 @@ const EventPage = ({ params }: EventPageProps) => {
       method: "PATCH",
       body: JSON.stringify({ locked: !event.lockedAt }),
     });
-    load();
+    reloadAfterWrite();
   };
 
   const handleDelete = async () => {
@@ -107,11 +174,16 @@ const EventPage = ({ params }: EventPageProps) => {
       method: "PATCH",
       body: JSON.stringify({ archived: true }),
     });
+    invalidateEvent(id);
     router.push("/events");
   };
 
-  if (error) return <p className={styles.error}>{error}</p>;
-  if (!event || !settings) return <p>Loading...</p>;
+  // Nothing to show yet: an event load failure is fatal, as before. A settings failure alone
+  // is not -- the page waits for the event and then surfaces it as the note below.
+  if (!loaded || !event) {
+    if (eventError) return <p className={styles.error}>{eventError}</p>;
+    return <p>Loading...</p>;
+  }
 
   // Mirrors the batch commit endpoint's own 409 check (spec tracklist-batch-save §2.6 Option
   // B) -- a played or manually-locked event's tracklist can no longer be edited. Disabling the
@@ -121,6 +193,20 @@ const EventPage = ({ params }: EventPageProps) => {
 
   return (
     <div className={styles.page}>
+      {(eventError || settingsError) && (
+        <div className={styles.staleNote} role="status">
+          <span className={styles.staleNoteText}>
+            {eventError &&
+              `Couldn't refresh -- showing data from ${formatGermanTimeOrDateTime(loaded.fetchedAt)}, may be outdated.`}
+            {eventError && settingsError && " "}
+            {settingsError && "Couldn't load display settings."}
+          </span>
+          <Button size="small" variant="outlined" color="inherit" onClick={handleRetry} disabled={retrying}>
+            {retrying ? "Retrying..." : "Retry"}
+          </Button>
+        </div>
+      )}
+
       <div className={styles.controls}>
         <Button variant="contained" color="secondary" onClick={() => setEditingEvent(true)}>
           Edit Event
@@ -156,7 +242,7 @@ const EventPage = ({ params }: EventPageProps) => {
         eventId={id}
         onDone={() => {
           setEditingTracklist(false);
-          load();
+          reloadAfterWrite();
         }}
       />
 
@@ -184,9 +270,19 @@ const EventPage = ({ params }: EventPageProps) => {
                 {openSongId === entry.id && (
                   <div className={styles.sheetPanel}>
                     {entry.sheet ? (
-                      <pre className={styles.sheet}>
-                        {applyOctaveUpSymbol(entry.sheet, settings.octaveUpDisplaySymbol)}
-                      </pre>
+                      // Settings can still be in flight on a cache-hit render. Wait for them
+                      // rather than flashing the raw "+" before the configured symbol arrives --
+                      // unless they failed to load: then the raw sheet beats no sheet (the note
+                      // at the top says settings are missing).
+                      settings ? (
+                        <pre className={styles.sheet}>
+                          {applyOctaveUpSymbol(entry.sheet, settings.octaveUpDisplaySymbol)}
+                        </pre>
+                      ) : settingsError ? (
+                        <pre className={styles.sheet}>{entry.sheet}</pre>
+                      ) : (
+                        <p>Loading...</p>
+                      )
                     ) : (
                       <p className={styles.empty}>No chord sheet for this song.</p>
                     )}

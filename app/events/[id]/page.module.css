@@ -19,6 +19,32 @@
   flex-wrap: wrap;
 }
 
+/* Shown above the controls when a refresh failed but older data stays on screen (see
+   eventError in page.tsx). Deliberately quiet: muted text on the surface color, with only a
+   thin danger-colored left edge as the warning cue -- the data below is still usable, so it
+   must not read like the full-page error. The Retry button wraps under the text on narrow
+   screens. */
+.staleNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  color: var(--color-foreground-muted);
+  font-size: var(--font-size-sm);
+  /* The text wraps to several lines on a phone; tighter than the body's line-height keeps the
+     note from eating the top of the tracklist. */
+  line-height: 1.3;
+}
+
+.staleNoteText {
+  flex: 1 1 12rem;
+}
+
 .error {
   color: var(--color-danger);
 }

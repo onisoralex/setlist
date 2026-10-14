@@ -6,6 +6,7 @@ import Button from "@mui/material/Button";
 import DateField from "@/components/DateField";
 import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import { apiFetch } from "@/lib/api-client";
+import { invalidateEvent, prefetchEvent } from "@/lib/event-detail-cache";
 import { formatGermanDate } from "@/lib/date-format";
 import type { EventStatus, EventSummary, EventType } from "@/lib/types";
 import scroll from "@/app/scroll.module.css";
@@ -41,6 +42,16 @@ const EventsPage = () => {
 
   useEffect(loadEvents, []);
 
+  // Warm the event detail cache so opening an event renders instantly (see
+  // lib/event-detail-cache.ts). An effect on `events` runs after the list has committed to the
+  // DOM, so the prefetch never delays the list render; requests run in parallel. Played events
+  // are skipped by design (only upcoming/in-progress events are worth the requests).
+  // Already-cached ids are refetched on purpose so the cache stays fresh;
+  // prefetchEvent itself shares requests that are still in flight.
+  useEffect(() => {
+    events?.filter((event) => event.status !== "played").forEach((event) => prefetchEvent(event.id));
+  }, [events]);
+
   const handleDelete = async (eventId: string) => {
     if (!window.confirm("Delete this event? It can still be recovered by an admin, but will disappear from your lists.")) {
       return;
@@ -49,6 +60,7 @@ const EventsPage = () => {
       method: "PATCH",
       body: JSON.stringify({ archived: true }),
     });
+    invalidateEvent(eventId);
     loadEvents();
   };
 

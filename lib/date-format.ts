@@ -24,3 +24,16 @@ export const formatGermanDateTime = (isoDateOrDate: string | Date): string => {
   const date = typeof isoDateOrDate === "string" ? new Date(isoDateOrDate) : isoDateOrDate;
   return date.toLocaleString("de-DE", DATE_TIME_OPTIONS);
 };
+
+const TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+};
+
+// "HH:MM" (24h) for timestamps from the current day; falls back to the full date + time when
+// the timestamp is from another day, so an old time-of-day alone can't pass as recent.
+export const formatGermanTimeOrDateTime = (date: Date, now: Date = new Date()): string =>
+  date.toDateString() === now.toDateString()
+    ? date.toLocaleTimeString("de-DE", TIME_OPTIONS)
+    : formatGermanDateTime(date);
