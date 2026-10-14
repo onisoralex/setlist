@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAuthToken } from "@/lib/auth";
+import { AUTH_COOKIE_MAX_AGE_SECONDS, AUTH_COOKIE_NAME, authCookieOptions, createAuthToken } from "@/lib/auth";
 import { jsonError, tooManyRequests } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
-
-const AUTH_COOKIE_NAME = "setlist_auth";
-const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 90; // 90 days
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_MAX_ATTEMPTS = 5;
@@ -59,12 +56,6 @@ export const POST = async (request: NextRequest) => {
 
   const token = await createAuthToken(process.env.SITE_PASSWORD ?? "");
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(AUTH_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: AUTH_COOKIE_MAX_AGE_SECONDS,
-    path: "/",
-  });
+  response.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions(AUTH_COOKIE_MAX_AGE_SECONDS));
   return response;
 };

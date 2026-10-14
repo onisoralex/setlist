@@ -5,7 +5,9 @@
 // SITE_PASSWORD. It doesn't encode an expiry itself -- validity is entirely "does recomputing
 // the HMAC with the current SITE_PASSWORD match this token", so rotating SITE_PASSWORD
 // invalidates every existing cookie at once. The cookie's own Max-Age is the other half of
-// expiry (see app/api/auth/login/route.ts).
+// expiry: set to 90 days at login (app/api/auth/login/route.ts) and re-set to a fresh 90 days
+// by proxy.ts on every authenticated page load, so the expiry is sliding -- the login only
+// lapses after 90 days without opening the app, not 90 days after the original login.
 //
 // Uses the Web Crypto API (`crypto.subtle`) rather than `node:crypto` because this runs from
 // proxy.ts, which historically ran on the Edge runtime (Next's Proxy convention now defaults
@@ -14,6 +16,21 @@
 // Same reasoning for avoiding `Buffer` below in favor of a manual hex conversion.
 
 const AUTH_TOKEN_MESSAGE = "setlist-auth";
+
+export const AUTH_COOKIE_NAME = "setlist_auth";
+export const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 90; // 90 days
+
+// Single source of the cookie's attributes for every place that sets it (login, logout, and the
+// sliding renewal in proxy.ts). A browser treats a Set-Cookie with a different path/secure/
+// sameSite as a *separate* cookie or ignores it, so the renewal and the logout's clear only
+// work if they match the login's attributes exactly -- hence one helper instead of three copies.
+export const authCookieOptions = (maxAge: number) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  maxAge,
+  path: "/",
+});
 
 const toHex = (buffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
