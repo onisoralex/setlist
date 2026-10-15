@@ -5,6 +5,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import SongForm, { type SongFormValues } from "@/components/SongForm";
 import { apiFetch } from "@/lib/api-client";
+import { invalidateSongsCache } from "@/lib/songs-list-cache";
 import type { SongDetail } from "@/lib/types";
 
 type NewSongModalProps = {
@@ -44,6 +45,9 @@ const NewSongModal = ({ open, initialTitle, onCreated, onCancel }: NewSongModalP
         sheet: values.sheet || null,
       }),
     });
+    // A new song belongs in the tracklist modal's cached song list (lib/songs-list-cache.ts).
+    // Done here rather than in each onCreated so both hosts of this modal get it.
+    invalidateSongsCache();
     onCreated(song);
   };
 

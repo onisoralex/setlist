@@ -7,6 +7,7 @@ import DateField from "@/components/DateField";
 import { useSetHeaderTitle } from "@/components/HeaderTitleProvider";
 import { apiFetch } from "@/lib/api-client";
 import { invalidateEvent, prefetchEvent } from "@/lib/event-detail-cache";
+import { prefetchSongs } from "@/lib/songs-list-cache";
 import { formatGermanDate } from "@/lib/date-format";
 import type { EventStatus, EventSummary, EventType } from "@/lib/types";
 import scroll from "@/app/scroll.module.css";
@@ -48,8 +49,12 @@ const EventsPage = () => {
   // are skipped by design (only upcoming/in-progress events are worth the requests).
   // Already-cached ids are refetched on purpose so the cache stays fresh;
   // prefetchEvent itself shares requests that are still in flight.
+  // The tracklist modal's song list is warmed in the same pass (lib/songs-list-cache.ts), so
+  // event -> Edit Tracklist opens with content; it's only fetched if not cached yet.
   useEffect(() => {
-    events?.filter((event) => event.status !== "played").forEach((event) => prefetchEvent(event.id));
+    if (!events) return;
+    events.filter((event) => event.status !== "played").forEach((event) => prefetchEvent(event.id));
+    prefetchSongs();
   }, [events]);
 
   const handleDelete = async (eventId: string) => {

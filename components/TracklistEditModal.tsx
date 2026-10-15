@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import type { FilterOptionsState } from "@mui/material/useAutocomplete";
 import Button from "@mui/material/Button";
@@ -15,7 +15,9 @@ import NewSongModal from "@/components/NewSongModal";
 import SearchScopeChips from "@/components/SearchScopeChips";
 import { apiFetch } from "@/lib/api-client";
 import { formatGermanDate } from "@/lib/date-format";
+import type { CachedEvent } from "@/lib/event-detail-cache";
 import { formatSongDisplayName } from "@/lib/song-display-name";
+import { fetchAndCacheSongs, getCachedSongs } from "@/lib/songs-list-cache";
 import { matchesSearch, scopesFromSettings, type SearchScopes } from "@/lib/song-search";
 import { OVERRIDABLE_FIELDS, type OverridableField, type OverridePatch } from "@/lib/track-list";
 import type { EventDetail, EventType, Settings, SongDetail, SongSummary, TracklistBatchEntry } from "@/lib/types";
@@ -143,31 +145,75 @@ const resolveBufferSongDisplay = (entry: SongBufferEntry): Record<OverridableFie
 
 const genTempId = () => `tmp-${crypto.randomUUID()}`;
 
+// Max age of initialEvent, measured when the modal opens, for it to seed the edit buffer. Done
+// PUT-replaces the whole tracklist, so seeding from old data could overwrite changes made on
+// another device since that data was fetched. "The caller's last revalidation succeeded" alone
+// isn't enough: a page left open for an hour still passes that test. Past this age the modal
+// fetches the event itself (normal Loading state).
+const EVENT_SEED_MAX_AGE_MS = 60_000;
+
+// The seed's event if it is young enough to use right now, else null. Called only at open time.
+const usableEventSeed = (seed: CachedEvent | null | undefined): EventDetail | null =>
+  seed && Date.now() - seed.fetchedAt.getTime() < EVENT_SEED_MAX_AGE_MS ? seed.event : null;
+
 type TracklistEditModalProps = {
   open: boolean;
   eventId: string;
+  // Optional seeds, read only on the closed->open transition (or on mount when mounted open).
+  // initialEvent must be data the caller has verified against the server (its latest
+  // revalidation succeeded, nothing written since), with the time it was fetched; it is only
+  // used if younger than EVENT_SEED_MAX_AGE_MS at open time. Pass null/omit when it can't be
+  // vouched for; the modal then fetches the event itself, as it did before these props existed.
+  initialEvent?: CachedEvent | null;
+  initialSettings?: Settings | null;
+  // Called with the PATCHed settings after a scope-chip toggle, so a caller passing
+  // initialSettings can keep its copy current for the next open.
+  onSettingsChange?: (updated: Settings) => void;
   onDone: () => void;
 };
 
 // Wraps the former app/events/[id]/edit/page.tsx in a Dialog, mirroring the EditSongModal/
-// NewSongModal pattern: self-contained, fetches its own EventDetail/SongSummary[]/Settings on
-// open rather than receiving them as props. Sized generously (fullWidth + maxWidth="lg" and a
-// fixed Paper height) since this is the most content-heavy screen in the app -- the top row
-// (search + scope chips + add-line) stays pinned while only the row list scrolls internally,
+// NewSongModal pattern: self-contained by default, fetching its own EventDetail/SongSummary[]/
+// Settings on open. The event page can instead hand over its freshly revalidated event and its
+// settings (props above), and the song list comes from lib/songs-list-cache.ts when warm, so in
+// the common case the modal opens with content instead of "Loading...". Sized generously
+// (fullWidth + maxWidth="lg" and a fixed Paper height) since this is the most content-heavy
+// screen in the app -- the top row (search + scope chips + add-line) stays pinned while only
+// the row list scrolls internally,
 // same "pinned toolbar, scrollable content" intent as app/scroll.module.css, just hand-rolled
 // here since that module's own doc note says Dialogs manage their own scroll instead.
 //
 // Every edit (add/remove/reorder/override) mutates `buffer` locally only (spec tracklist-
-// batch-save §1) -- `load()` seeds it once on open and is never called again by an action
-// handler. Done and Dialog's own onClose both commit the whole buffer in one PUT request
-// (§5). The two exceptions that still hit the network immediately both touch global master
+// batch-save §1) -- it's seeded once per open (from initialEvent or the open-time event fetch)
+// and never reseeded while open, not even when the caller's own copy of the event refreshes.
+// Done and Dialog's own onClose both commit the whole buffer in one PUT request (§5). The two exceptions that still hit the network immediately both touch global master
 // data, not this event's tracklist: NewSongModal's song-creation POST (§3) and EditSongModal's
 // song PATCH (row pencil), after which handleSongSaved patches the buffer in place.
-const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) => {
-  const [event, setEvent] = useState<EventDetail | null>(null);
-  const [allSongs, setAllSongs] = useState<SongSummary[] | null>(null);
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [buffer, setBuffer] = useState<TracklistBuffer>([]);
+const TracklistEditModal = ({
+  open,
+  eventId,
+  initialEvent,
+  initialSettings,
+  onSettingsChange,
+  onDone,
+}: TracklistEditModalProps) => {
+  // Age check done once here for a modal mounted already open (the transition below covers
+  // every later open), so the event/buffer/eventSeeded initializers agree with each other.
+  const [mountSeed] = useState(() => (open ? usableEventSeed(initialEvent) : null));
+  const [event, setEvent] = useState<EventDetail | null>(mountSeed);
+  // Seeded from the songs cache (stale-while-revalidate): the open effect below always
+  // revalidates it, and the fresh list just replaces this one -- it never touches `buffer`.
+  // Hydration-safe for the same reason as the event page's cache seed: the cache is only ever
+  // written client-side after mount.
+  const [allSongs, setAllSongs] = useState<SongSummary[] | null>(() => getCachedSongs() ?? null);
+  const [settings, setSettings] = useState<Settings | null>(() => (open ? (initialSettings ?? null) : null));
+  const [buffer, setBuffer] = useState<TracklistBuffer>(() => (mountSeed ? seedBuffer(mountSeed) : []));
+  // Whether this open was seeded from the props, captured at open time. The fetch effects key
+  // off these rather than off the props themselves, so a prop changing while open (e.g. the
+  // event page's revalidation landing and its initialEvent going from null to fresh data)
+  // neither reseeds the buffer nor triggers a refetch.
+  const [eventSeeded, setEventSeeded] = useState(mountSeed !== null);
+  const [settingsSeeded, setSettingsSeeded] = useState(() => open && initialSettings != null);
   const [error, setError] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<string | null>(null);
@@ -180,50 +226,103 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
   // song, not this event's tracklist -- see handleSongSaved for how the buffer catches up.
   const [editSongGroupId, setEditSongGroupId] = useState<string | null>(null);
 
-  // The component stays mounted while the Dialog is closed, so overrideTarget would otherwise
-  // survive a close/reopen and the previously open panel would reappear. Resetting it unmounts
-  // OverrideEditor, which silently drops any unsaved drafts. Done during render on the
-  // closed->open transition (React's "adjusting state when a prop changes" pattern) rather than
-  // in the open effect below: react-hooks/set-state-in-effect forbids the latter, and this way
-  // the stale panel never paints for even one frame.
+  // The component stays mounted while the Dialog is closed, so per-open state would otherwise
+  // survive a close/reopen. Reset/seeded during render on the closed->open transition (React's
+  // "adjusting state when a prop changes" pattern) rather than in the open effects below:
+  // react-hooks/set-state-in-effect forbids the latter, and this way nothing from the previous
+  // open paints for even one frame. In particular:
+  // - overrideTarget: the previously open panel would reappear. Resetting it unmounts
+  //   OverrideEditor, which silently drops any unsaved drafts.
+  // - event/buffer: either seeded from initialEvent right here (if young enough *now* -- see
+  //   EVENT_SEED_MAX_AGE_MS), or cleared so the previous open's buffer can't be shown (and
+  //   edited) until the event fetch below replaces it.
+  // - allSongs/settings: the previous open's values are fine to show while they revalidate; a
+  //   warm cache or a settings seed is simply newer.
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setOverrideTarget(null);
+    if (open) {
+      setOverrideTarget(null);
+      setError(null);
+      const seed = usableEventSeed(initialEvent);
+      setEvent(seed);
+      setBuffer(seed ? seedBuffer(seed) : []);
+      setEventSeeded(seed !== null);
+      if (initialSettings) setSettings(initialSettings);
+      setSettingsSeeded(initialSettings != null);
+      const cachedSongs = getCachedSongs();
+      if (cachedSongs) setAllSongs(cachedSongs);
+    }
   }
 
-  // useCallback (rather than a plain function, unlike the page this replaced) so its identity
-  // only changes when eventId does -- satisfies react-hooks/exhaustive-deps below without
-  // re-fetching on every unrelated re-render (e.g. typing in an override field).
-  const load = useCallback(() => {
-    Promise.all([
-      apiFetch<EventDetail>(`/api/events/${eventId}`),
-      // includeArchived=true (not the default excluded-archived list): the combobox's
-      // availableSongs still filters archived out below, but each row's titleDe/titleEn lookup
-      // needs to resolve even a group archived after it was added to this tracklist --
-      // archiving never touches existing track_list_song rows, so that's a real, reachable
-      // case, not hypothetical.
-      apiFetch<SongSummary[]>("/api/songs?includeArchived=true"),
-    ])
-      .then(([eventResult, songsResult]) => {
+  // Event fetch, only when this open wasn't seeded. `active` drops a response that lands after
+  // the modal closed again -- otherwise a slow fetch from an earlier open could reseed the
+  // buffer of a later one.
+  useEffect(() => {
+    if (!open || eventSeeded) return;
+    let active = true;
+    apiFetch<EventDetail>(`/api/events/${eventId}`)
+      .then((eventResult) => {
+        if (!active) return;
         setEvent(eventResult);
-        setAllSongs(songsResult);
         setBuffer(seedBuffer(eventResult));
       })
-      .catch((err) => setError(err.message));
-  }, [eventId]);
+      .catch((err) => {
+        if (active) setError(err.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, eventSeeded, eventId]);
 
+  // Song list: always revalidated on open, even when the cache already filled allSongs.
+  // includeArchived=true (not the default excluded-archived list): the combobox's
+  // availableSongs still filters archived out below, but each row's titleDe/titleEn lookup
+  // needs to resolve even a group archived after it was added to this tracklist -- archiving
+  // never touches existing track_list_song rows, so that's a real, reachable case, not
+  // hypothetical. A failed revalidation is only an error if there's no list to show at all;
+  // with a cached one the combobox keeps working on it (it can only miss songs created
+  // elsewhere since it was fetched).
+  // Song-list loads can overlap (this revalidation, the refetch after a song create or edit), so
+  // only the newest may set allSongs -- otherwise a slow open-time response could land after a
+  // create and drop the new song from the list again.
+  const latestSongsLoad = useRef(0);
   useEffect(() => {
     if (!open) return;
-    load();
-  }, [open, load]);
-
-  useEffect(() => {
-    if (!open) return;
-    apiFetch<Settings>("/api/settings")
-      .then(setSettings)
-      .catch((err) => setError(err.message));
+    let active = true;
+    const loadNumber = ++latestSongsLoad.current;
+    const hadCachedList = getCachedSongs() !== undefined;
+    fetchAndCacheSongs()
+      .then((songsResult) => {
+        if (active && loadNumber === latestSongsLoad.current) setAllSongs(songsResult);
+      })
+      .catch((err) => {
+        if (active && !hadCachedList) setError(err.message);
+      });
+    return () => {
+      active = false;
+    };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || settingsSeeded) return;
+    let active = true;
+    apiFetch<Settings>("/api/settings")
+      .then((result) => {
+        if (active) setSettings(result);
+      })
+      .catch((err) => {
+        if (active) setError(err.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, settingsSeeded]);
+
+  const handleSettingsChange = (updated: Settings) => {
+    setSettings(updated);
+    onSettingsChange?.(updated);
+  };
 
   const addSong = (summary: SongSummary | SongDetail) => {
     const values = valuesFromSummary(summary);
@@ -270,8 +369,8 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
 
   // The PATCH behind EditSongModal creates a new song version and re-points this event's
   // track_list_song rows to it (lib/song-versioning.ts -- this modal only opens for draft/
-  // scheduled, unlocked events, exactly the ones that get re-pointed). Deliberately NOT load():
-  // that reseeds `buffer` and would wipe every uncommitted reorder/add/remove/override. Instead
+  // scheduled, unlocked events, exactly the ones that get re-pointed). Deliberately NOT a reseed:
+  // that would wipe every uncommitted reorder/add/remove/override. Instead
   // only the edited group's song entries are patched in place:
   // - persisted rows take baseResolved/inherited/overriddenFields from the refetched row (by id),
   //   so stored overrides keep winning over the new song values; their pending `overrides`,
@@ -279,17 +378,46 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
   // - rows added this session (id null) are rebuilt from the refetched song summary.
   // A persisted row the user removed is simply absent from the buffer; one missing from the
   // refetched event (shouldn't happen) is left as is.
+  // A song created from the combobox isn't in allSongs yet, so its row would show no
+  // titleDe/titleEn (songSummaryByGroupId lookup) until the next open. It's appended right away
+  // from the POST response -- SongDetail is a superset of SongSummary -- and the list is then
+  // refetched (NewSongModal has invalidated the cache) to re-warm the cache. Only allSongs is
+  // touched; the buffer change is addSong's alone.
+  const handleSongCreated = (song: SongDetail) => {
+    setNewSongQuery(null);
+    addSong(song);
+    const summary: SongSummary = {
+      id: song.id,
+      archived: song.archived,
+      titleDe: song.titleDe,
+      titleEn: song.titleEn,
+      ...valuesFromSummary(song),
+    };
+    setAllSongs((prev) => (prev && !prev.some((s) => s.id === summary.id) ? [...prev, summary] : prev));
+    const loadNumber = ++latestSongsLoad.current;
+    fetchAndCacheSongs()
+      .then((songsResult) => {
+        if (loadNumber === latestSongsLoad.current) setAllSongs(songsResult);
+      })
+      // The appended entry already covers this open; a failed refetch only leaves the cache
+      // cold, and the next open fetches it.
+      .catch(() => {});
+  };
+
   const handleSongSaved = async () => {
     const songGroupId = editSongGroupId;
     setEditSongGroupId(null);
     if (songGroupId === null) return;
+    const songsLoadNumber = ++latestSongsLoad.current;
     try {
       const [eventResult, songsResult] = await Promise.all([
         apiFetch<EventDetail>(`/api/events/${eventId}`),
-        apiFetch<SongSummary[]>("/api/songs?includeArchived=true"),
+        // A fresh request regardless of the cache (EditSongModal has invalidated it by now
+        // anyway); also re-warms the cache with the edited song for the next open.
+        fetchAndCacheSongs(),
       ]);
       setEvent(eventResult);
-      setAllSongs(songsResult);
+      if (songsLoadNumber === latestSongsLoad.current) setAllSongs(songsResult);
       const refetchedById = new Map(eventResult.songs.map((row) => [row.id, row]));
       const summary = songsResult.find((s) => s.id === songGroupId);
       setBuffer((prev) =>
@@ -365,7 +493,7 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
                 onAdd={addSong}
                 onCreateNew={setNewSongQuery}
               />
-              <SearchScopeChips settings={settings} onChange={setSettings} />
+              <SearchScopeChips settings={settings} onChange={handleSettingsChange} />
               <Button type="button" variant="contained" color="secondary" onClick={addSpacer}>
                 + Add Empty Line
               </Button>
@@ -374,10 +502,7 @@ const TracklistEditModal = ({ open, eventId, onDone }: TracklistEditModalProps) 
             <NewSongModal
               open={newSongQuery !== null}
               initialTitle={newSongQuery ?? undefined}
-              onCreated={(song: SongDetail) => {
-                setNewSongQuery(null);
-                addSong(song);
-              }}
+              onCreated={handleSongCreated}
               onCancel={() => setNewSongQuery(null)}
             />
 

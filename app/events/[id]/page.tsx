@@ -14,6 +14,7 @@ import {
   type CachedEvent,
 } from "@/lib/event-detail-cache";
 import { formatGermanDate, formatGermanTimeOrDateTime } from "@/lib/date-format";
+import { prefetchSongs } from "@/lib/songs-list-cache";
 import { applyOctaveUpSymbol } from "@/lib/notation";
 import { formatSongDisplayName } from "@/lib/song-display-name";
 import type { EventDetail, EventStatus, EventType, Settings } from "@/lib/types";
@@ -55,6 +56,18 @@ const EventPage = ({ params }: EventPageProps) => {
   // with a "may be outdated" note (stale data beats no data at a music stand with bad Wi-Fi).
   // Only an event load failure with nothing to show falls back to the full error.
   const [eventError, setEventError] = useState<string | null>(null);
+  // The event as returned by the newest load *if that load succeeded and nothing has been
+  // written since* -- null while the data on screen is only the unrevalidated cache entry, while
+  // a load is pending after a write/Retry, or after a failed load. Passed to TracklistEditModal
+  // as its seed: the modal's Done replaces the whole tracklist, so seeding its buffer from data
+  // that may predate a change made elsewhere (another device, or this page's own last commit)
+  // would silently overwrite that change. When null the modal fetches the event itself. Kept
+  // with its fetched-at time because the modal additionally refuses a seed older than a minute
+  // at open time (EVENT_SEED_MAX_AGE_MS) -- a page left open for long still passes the check
+  // above.
+  // Set to null synchronously in the handlers that start a load, not in loadEvent: those run
+  // from event handlers, while loadEvent also runs from the mount effect, where it starts null.
+  const [verifiedEvent, setVerifiedEvent] = useState<CachedEvent | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [openSongId, setOpenSongId] = useState<string | null>(null);
@@ -75,10 +88,12 @@ const EventPage = ({ params }: EventPageProps) => {
       (entry) => {
         if (loadNumber !== latestLoad.current) return;
         setLoaded(entry);
+        setVerifiedEvent(entry);
         setEventError(null);
       },
       (err: Error) => {
         if (loadNumber !== latestLoad.current) return;
+        setVerifiedEvent(null);
         setEventError(err.message);
       },
     );
@@ -93,14 +108,17 @@ const EventPage = ({ params }: EventPageProps) => {
   // screen until the fresh data arrives -- and if the refetch fails it stays with the outdated
   // note (whose fetched-at time predates the write), never silently passed off as fresh.
   const reloadAfterWrite = () => {
+    setVerifiedEvent(null);
     invalidateEvent(id);
     loadEvent();
   };
 
   // Loaded separately from the event (was one Promise.all) so a cached event can render
   // without waiting on settings. Settings only feed the chord sheet's octave-up symbol, which
-  // sits behind a tap-to-expand panel, and can't change from this page -- so it's fetched once
-  // rather than on every event refetch (Retry re-runs it only if it never succeeded).
+  // sits behind a tap-to-expand panel. The only way they change from this page is the tracklist
+  // modal's scope chips, which hand back the PATCHed settings (onSettingsChange) -- so it's
+  // fetched once rather than on every event refetch (Retry re-runs it only if it never
+  // succeeded). The same copy seeds the tracklist modal's search scopes.
   // Never rejects, same as loadEvent.
   const loadSettings = (): Promise<void> =>
     apiFetch<Settings>("/api/settings").then(
@@ -115,10 +133,18 @@ const EventPage = ({ params }: EventPageProps) => {
     loadSettings();
   }, []);
 
+  // Warms the tracklist modal's song list (lib/songs-list-cache.ts) for a page reached without
+  // going through the event list (deep link, reload). Runs after the event and settings
+  // requests have started, and is a no-op if the list is already cached or in flight.
+  useEffect(() => {
+    prefetchSongs();
+  }, []);
+
   // Re-runs the failed loads in place. A page reload is not a recovery path: it would wipe the
   // in-memory event cache and, while still offline, land on the full error instead.
   const handleRetry = async () => {
     setRetrying(true);
+    setVerifiedEvent(null);
     await Promise.all([loadEvent(), settings ? null : loadSettings()]);
     setRetrying(false);
   };
@@ -237,9 +263,16 @@ const EventPage = ({ params }: EventPageProps) => {
         />
       )}
 
+      {/* Seeds are read only when the modal opens (see TracklistEditModal), so this page's
+          revalidation landing while it's open never touches its buffer. Scope-chip toggles in the
+          modal PATCH settings; reporting them back keeps this page's copy -- the next open's seed
+          -- current. */}
       <TracklistEditModal
         open={editingTracklist}
         eventId={id}
+        initialEvent={verifiedEvent}
+        initialSettings={settings}
+        onSettingsChange={setSettings}
         onDone={() => {
           setEditingTracklist(false);
           reloadAfterWrite();
