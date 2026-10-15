@@ -26,7 +26,7 @@ Deviations from the Hive default web stack (`C:\hive\docs\tech-stack.md` §2 / "
 | Database | PostgreSQL (Neon) | Provisioned via Vercel Marketplace, not a standalone Neon account |
 | ORM | Prisma + `@prisma/adapter-neon` | Pooled connection for runtime queries, unpooled for migrations |
 | Styling | CSS Modules + CSS custom properties | No component library (deviation, see above) |
-| Auth | Shared password (`lib/auth.ts` + `middleware.ts`) | Single shared secret, no real user accounts — added once the app moved off localhost-only access |
+| Auth | Shared password (`lib/auth.ts` + `proxy.ts`) | Single shared secret, no real user accounts — added once the app moved off localhost-only access |
 | Payments | None | Not monetized |
 | Analytics | None | Not needed for a personal tool |
 | Ads | None | Not applicable |
@@ -138,7 +138,7 @@ Five tables. Full DDL and rationale in `docs/specs/00-foundation.md` and the Hiv
 
 ## API Design
 
-REST/JSON under `/api/*`. Full endpoint list in `docs/specs/00-foundation.md` §2. Every endpoint (except `/api/auth/login`) requires the shared-password auth cookie, enforced by `middleware.ts` — see the Auth row above.
+REST/JSON under `/api/*`. Full endpoint list in `docs/specs/00-foundation.md` §2. Every endpoint (except `/api/auth/login`) requires the shared-password auth cookie, enforced by `proxy.ts` (Next.js 16's replacement for the `middleware` file convention) — see the Auth row above.
 
 ---
 

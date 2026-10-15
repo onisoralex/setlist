@@ -113,7 +113,7 @@ Foreign key behavior: `song_group` and `song` use `ON DELETE RESTRICT` because t
 
 ## 2. API Endpoints
 
-REST, JSON, gated by a single shared-password cookie (see `lib/auth.ts` + `middleware.ts` — single-user, but now deployed publicly, hence the gate). All routes under `/api`.
+REST, JSON, gated by a single shared-password cookie (see `lib/auth.ts` + `proxy.ts` — single-user, but now deployed publicly, hence the gate). All routes under `/api`.
 
 **Songs**
 - `GET /api/songs` — list song groups, each showing its current version's summary fields (title, key, transpose, instrument). Excludes archived by default; `?includeArchived=true` to include them.

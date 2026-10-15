@@ -6,7 +6,7 @@ A personal song-repertoire and setlist management webapp for a bass player in a 
 
 ## Who it's for
 
-A single user (the bass player). No accounts, no real multi-user support — just one person's repertoire and setlists. Since the app moved off localhost-only access, it's gated behind one shared password (`SITE_PASSWORD`), enforced in `middleware.ts` via `lib/auth.ts`, with Postgres-backed brute-force protection on login attempts (see the `LoginAttempt` model in `prisma/schema.prisma`). That's a single shared secret, not real per-user accounts — if you're picking this project up, the lack of proper multi-user auth is a deliberate scope decision, not an oversight to "fix" (see `docs/architecture.md`).
+A single user (the bass player). No accounts, no real multi-user support — just one person's repertoire and setlists. Since the app moved off localhost-only access, it's gated behind one shared password (`SITE_PASSWORD`), enforced in `proxy.ts` via `lib/auth.ts`, with Postgres-backed brute-force protection on login attempts (see the `LoginAttempt` model in `prisma/schema.prisma`). That's a single shared secret, not real per-user accounts — if you're picking this project up, the lack of proper multi-user auth is a deliberate scope decision, not an oversight to "fix" (see `docs/architecture.md`).
 
 ## Goals
 
