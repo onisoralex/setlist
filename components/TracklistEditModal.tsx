@@ -70,8 +70,8 @@ type TracklistBufferEntry =
       // API's `inherited`), or for rows added this session the summary they were added with.
       // The fallback for a pending clear, see resolveBufferSongDisplay.
       inherited: Record<OverridableField, string | null>;
-      // Tri-state patch accumulated locally since this entry was created -- same wire semantics
-      // as the old PATCH .../overrides body (key absent = untouched, null = clear, string = set).
+      // Tri-state patch accumulated locally since this entry was created, sent as-is on commit
+      // (key absent = untouched, null = clear, string = set -- see OverridePatch).
       overrides: OverridePatch;
     }
   | {
@@ -179,16 +179,17 @@ type TracklistEditModalProps = {
 // the common case the modal opens with content instead of "Loading...". Sized generously
 // (fullWidth + maxWidth="lg" and a fixed Paper height) since this is the most content-heavy
 // screen in the app -- the top row (search + scope chips + add-line) stays pinned while only
-// the row list scrolls internally,
-// same "pinned toolbar, scrollable content" intent as app/scroll.module.css, just hand-rolled
-// here since that module's own doc note says Dialogs manage their own scroll instead.
+// the row list scrolls internally, same "pinned toolbar, scrollable content" intent as
+// app/scroll.module.css, just hand-rolled here since that module's own doc note says Dialogs
+// manage their own scroll instead.
 //
 // Every edit (add/remove/reorder/override) mutates `buffer` locally only (spec tracklist-
 // batch-save §1) -- it's seeded once per open (from initialEvent or the open-time event fetch)
 // and never reseeded while open, not even when the caller's own copy of the event refreshes.
-// Done and Dialog's own onClose both commit the whole buffer in one PUT request (§5). The two exceptions that still hit the network immediately both touch global master
-// data, not this event's tracklist: NewSongModal's song-creation POST (§3) and EditSongModal's
-// song PATCH (row pencil), after which handleSongSaved patches the buffer in place.
+// Done and Dialog's own onClose both commit the whole buffer in one PUT request (§5). The two
+// exceptions that still hit the network immediately both touch global master data, not this
+// event's tracklist: NewSongModal's song-creation POST (§3) and EditSongModal's song PATCH
+// (row pencil), after which handleSongSaved patches the buffer in place.
 const TracklistEditModal = ({
   open,
   eventId,
@@ -367,17 +368,6 @@ const TracklistEditModal = ({
     setEditSongGroupId(songGroupId);
   };
 
-  // The PATCH behind EditSongModal creates a new song version and re-points this event's
-  // track_list_song rows to it (lib/song-versioning.ts -- this modal only opens for draft/
-  // scheduled, unlocked events, exactly the ones that get re-pointed). Deliberately NOT a reseed:
-  // that would wipe every uncommitted reorder/add/remove/override. Instead
-  // only the edited group's song entries are patched in place:
-  // - persisted rows take baseResolved/inherited/overriddenFields from the refetched row (by id),
-  //   so stored overrides keep winning over the new song values; their pending `overrides`,
-  //   position and clientKey are untouched.
-  // - rows added this session (id null) are rebuilt from the refetched song summary.
-  // A persisted row the user removed is simply absent from the buffer; one missing from the
-  // refetched event (shouldn't happen) is left as is.
   // A song created from the combobox isn't in allSongs yet, so its row would show no
   // titleDe/titleEn (songSummaryByGroupId lookup) until the next open. It's appended right away
   // from the POST response -- SongDetail is a superset of SongSummary -- and the list is then
@@ -404,6 +394,17 @@ const TracklistEditModal = ({
       .catch(() => {});
   };
 
+  // The PATCH behind EditSongModal creates a new song version and re-points this event's
+  // track_list_song rows to it (lib/song-versioning.ts -- this modal only opens for draft/
+  // scheduled, unlocked events, exactly the ones that get re-pointed). Deliberately NOT a reseed:
+  // that would wipe every uncommitted reorder/add/remove/override. Instead only the edited
+  // group's song entries are patched in place:
+  // - persisted rows take baseResolved/inherited/overriddenFields from the refetched row (by id),
+  //   so stored overrides keep winning over the new song values; their pending `overrides`,
+  //   position and clientKey are untouched.
+  // - rows added this session (id null) are rebuilt from the refetched song summary.
+  // A persisted row the user removed is simply absent from the buffer; one missing from the
+  // refetched event (shouldn't happen) is left as is.
   const handleSongSaved = async () => {
     const songGroupId = editSongGroupId;
     setEditSongGroupId(null);
@@ -451,8 +452,8 @@ const TracklistEditModal = ({
   };
 
   // Commits the whole buffer in one request (spec §5). Wired to both Done and Dialog's own
-  // onClose (backdrop click / Escape), per the Mind's confirmed direction -- this modal has no
-  // separate discard/cancel path. On failure the dialog stays open and `buffer` is untouched,
+  // onClose (backdrop click / Escape) by design -- this modal has no separate discard/cancel
+  // path. On failure the dialog stays open and `buffer` is untouched,
   // since it's never cleared/reset here -- none of the user's local edits are lost.
   const handleCommit = async () => {
     if (committing) return; // guards a double-fire from Done-click racing backdrop-click

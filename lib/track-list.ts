@@ -8,11 +8,10 @@ import type { TracklistBatchEntry } from "@/lib/types";
 type SongWithGroup = Song & { songGroup: SongGroup };
 
 // The six fields that can be overridden per-event (spec 00-foundation.md §3.3). Kept as a
-// tuple of keys rather than duplicated per-field code so resolveTrackListEntry and any future
-// caller (e.g. the overrides PATCH handler) share one source of truth for "which fields".
-// Exported for TracklistEditModal too -- importing a runtime value from here into a "use client"
-// component is safe for the same reason the type imports are (no server-only imports, see
-// lib/types.ts's header).
+// tuple of keys rather than duplicated per-field code so resolveTrackListEntry,
+// buildOverrideUpdate and TracklistEditModal share one source of truth for "which fields".
+// Importing this runtime value into a "use client" component is safe because this file has no
+// server-only imports (only Prisma-generated *types*, never the `prisma` client singleton).
 export const OVERRIDABLE_FIELDS = ["title", "key", "transpose", "instrument", "notes", "sheet"] as const;
 export type OverridableField = (typeof OVERRIDABLE_FIELDS)[number];
 
@@ -110,11 +109,11 @@ export const resolveTrackListEntry = (
   };
 };
 
-// Tri-state PATCH body for .../overrides (spec §2, §6): a key absent from the body means
-// "don't touch this override"; present as `null` means "clear it"; present as a string
-// (including "") means "set it". `Partial<...>` alone can't express "present but null" vs
-// "absent" once the value round-trips through JSON.parse, so route handlers must check
-// `field in body`, not `body.field !== undefined` -- see app/api/events/[id]/songs/[trackListSongId]/overrides/route.ts.
+// Tri-state override patch, sent per song entry in PUT .../tracklist (spec §6): a key absent
+// means "don't touch this override"; present as `null` means "clear it"; present as a string
+// (including "") means "set it". `Partial<...>` alone can't tell "present but null" from
+// "absent" after JSON.parse, so readers must check `field in body`, not
+// `body.field !== undefined` -- as buildOverrideUpdate below does.
 export type OverridePatch = Partial<Record<OverridableField, string | null>>;
 
 /**
@@ -183,8 +182,8 @@ export const commitTracklistBatch = async (
   const createEntries = entries.filter((entry) => entry.id === null);
 
   // Step 2: park every surviving existing row at a unique negative position -- guarantees no
-  // collision with each other or with the final 0..N-1 range, same trick PATCH .../reorder
-  // already used, generalized here to also make room for simultaneous inserts (step 3).
+  // collision with each other or with the final 0..N-1 range (positions are unique per event,
+  // so rows can't move straight to their target), and leaves room for the inserts in step 3.
   await Promise.all(
     keepEntries.map((entry, i) => tx.trackListSong.update({ where: { id: entry.id! }, data: { position: -(i + 1) } })),
   );

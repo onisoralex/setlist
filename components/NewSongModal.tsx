@@ -27,9 +27,9 @@ const EMPTY_VALUES: SongFormValues = {
 };
 
 // Wraps the existing, presentation-agnostic SongForm in a Dialog (spec §3.7). Performs the
-// POST itself -- same place app/songs/new/page.tsx already did it -- and hands the created
-// song back via onCreated rather than navigating, so both the song-list and the tracklist-
-// combobox "create new" entry points can share this one component with different callbacks.
+// POST itself and hands the created song back via onCreated rather than navigating, so the
+// song list, app/songs/new/page.tsx and the tracklist combobox's "create new" entry point can
+// share this one component with different callbacks.
 const NewSongModal = ({ open, initialTitle, onCreated, onCancel }: NewSongModalProps) => {
   const handleSubmit = async (values: SongFormValues) => {
     const song = await apiFetch<SongDetail>("/api/songs", {
@@ -46,7 +46,7 @@ const NewSongModal = ({ open, initialTitle, onCreated, onCancel }: NewSongModalP
       }),
     });
     // A new song belongs in the tracklist modal's cached song list (lib/songs-list-cache.ts).
-    // Done here rather than in each onCreated so both hosts of this modal get it.
+    // Done here rather than in each onCreated so every host of this modal gets it.
     invalidateSongsCache();
     onCreated(song);
   };

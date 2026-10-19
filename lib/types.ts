@@ -4,7 +4,7 @@
 
 // lib/track-list.ts has no server-only imports (only Prisma-generated *types*, never the
 // `prisma` client singleton), so this type-only import is safe to pull into "use client"
-// components too -- see that file's OverridePatch doc comment.
+// components too.
 import type { OverridePatch, ResolvedTrackListEntry } from "@/lib/track-list";
 
 export type EventStatus = "draft" | "scheduled" | "played";
